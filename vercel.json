@@ -1,0 +1,8 @@
+{
+  "buildCommand": "npm run build:h5",
+  "outputDirectory": "dist/build/h5",
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
