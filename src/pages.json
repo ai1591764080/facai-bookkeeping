@@ -1,0 +1,39 @@
+{
+  "pages": [
+    { "path": "pages/index/index", "style": { "navigationBarTitleText": "账单", "navigationStyle": "custom" } },
+    { "path": "pages/stats/stats", "style": { "navigationBarTitleText": "统计", "navigationStyle": "custom" } },
+    { "path": "pages/assets/assets", "style": { "navigationBarTitleText": "资产", "navigationStyle": "custom" } },
+    { "path": "pages/mine/mine", "style": { "navigationBarTitleText": "我的", "navigationStyle": "custom" } },
+    { "path": "pages/add/add", "style": { "navigationBarTitleText": "记一笔", "navigationStyle": "custom" } },
+    { "path": "pages/category/manage", "style": { "navigationBarTitleText": "分类管理" } },
+    { "path": "pages/category/edit", "style": { "navigationBarTitleText": "编辑分类" } },
+    { "path": "pages/account/manage", "style": { "navigationBarTitleText": "账户管理" } },
+    { "path": "pages/account/edit", "style": { "navigationBarTitleText": "编辑账户" } },
+    { "path": "pages/ledger/manage", "style": { "navigationBarTitleText": "账本管理" } },
+    { "path": "pages/budget/budget", "style": { "navigationBarTitleText": "预算管理" } },
+    { "path": "pages/aa/aa", "style": { "navigationBarTitleText": "AA记账" } },
+    { "path": "pages/export/export", "style": { "navigationBarTitleText": "数据导出" } },
+    { "path": "pages/ai/chat", "style": { "navigationBarTitleText": "AI 助手", "navigationStyle": "custom" } },
+    { "path": "pages/ai/insights", "style": { "navigationBarTitleText": "AI 洞察", "navigationStyle": "custom" } },
+    { "path": "pages/ai/settings", "style": { "navigationBarTitleText": "AI 设置" } }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "发财记账",
+    "navigationBarBackgroundColor": "#F5F6FA",
+    "backgroundColor": "#F5F6FA",
+    "backgroundTextStyle": "dark"
+  },
+  "tabBar": {
+    "color": "#9CA3AF",
+    "selectedColor": "#4F6EF7",
+    "borderStyle": "white",
+    "backgroundColor": "#FFFFFF",
+    "list": [
+      { "pagePath": "pages/index/index", "text": "账单", "iconPath": "static/icons/tab-bill.png", "selectedIconPath": "static/icons/tab-bill-active.png" },
+      { "pagePath": "pages/stats/stats", "text": "统计", "iconPath": "static/icons/tab-stats.png", "selectedIconPath": "static/icons/tab-stats-active.png" },
+      { "pagePath": "pages/assets/assets", "text": "资产", "iconPath": "static/icons/tab-asset.png", "selectedIconPath": "static/icons/tab-asset-active.png" },
+      { "pagePath": "pages/mine/mine", "text": "我的", "iconPath": "static/icons/tab-mine.png", "selectedIconPath": "static/icons/tab-mine-active.png" }
+    ]
+  }
+}
