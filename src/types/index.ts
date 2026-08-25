@@ -97,3 +97,31 @@ export interface AABill {
   splits: { memberId: string; amount: number; settled: boolean }[]
   createdAt: string
 }
+
+// ---------- 扫描识别 / 智能归档 ----------
+
+/** 一条识别整理后的候选账单（尚未计入统计） */
+export interface ScanCandidate {
+  type: TransactionType
+  amount: number
+  categoryName: string
+  accountName: string
+  note: string
+  date: string // YYYY-MM-DD
+  confidence: number
+}
+
+/** 一条扫描归档记录 */
+export interface ScanRecord {
+  id: string
+  ledgerId: string
+  // 待归档（pending）的记录不计入统计；确认归档（archived）后才会生成真实账单
+  status: 'pending' | 'archived' | 'rejected'
+  ocrText: string
+  image: string // 缩略图 base64（用于归档列表展示，可空）
+  candidates: ScanCandidate[]
+  // 归档时生成的实际交易 id 列表
+  transactionIds: string[]
+  createdAt: string
+  archivedAt?: string
+}

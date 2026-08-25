@@ -15,7 +15,9 @@
     { "path": "pages/export/export", "style": { "navigationBarTitleText": "数据导出" } },
     { "path": "pages/ai/chat", "style": { "navigationBarTitleText": "AI 助手", "navigationStyle": "custom" } },
     { "path": "pages/ai/insights", "style": { "navigationBarTitleText": "AI 洞察", "navigationStyle": "custom" } },
-    { "path": "pages/ai/settings", "style": { "navigationBarTitleText": "AI 设置" } }
+    { "path": "pages/ai/settings", "style": { "navigationBarTitleText": "AI 设置" } },
+    { "path": "pages/scan/scan", "style": { "navigationBarTitleText": "扫描识别记账", "navigationStyle": "custom" } },
+    { "path": "pages/scan/archive", "style": { "navigationBarTitleText": "智能归档" } }
   ],
   "globalStyle": {
     "navigationBarTextStyle": "black",

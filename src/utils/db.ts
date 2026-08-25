@@ -1,4 +1,4 @@
-import type { Transaction, Category, Account, Ledger, Budget, Tag, AABill } from '../types'
+import type { Transaction, Category, Account, Ledger, Budget, Tag, AABill, ScanRecord } from '../types'
 
 const KEYS = {
   TRANSACTIONS: 'beecount_transactions',
@@ -9,6 +9,7 @@ const KEYS = {
   TAGS: 'beecount_tags',
   AA_BILLS: 'beecount_aa_bills',
   CURRENT_LEDGER: 'beecount_current_ledger',
+  SCAN_RECORDS: 'beecount_scan_records',
 } as const
 
 function get<T>(key: string, fallback: T): T {
@@ -123,4 +124,13 @@ export function getAABills(): AABill[] {
 
 export function saveAABills(list: AABill[]): void {
   set(KEYS.AA_BILLS, list)
+}
+
+// ---------- Scan Records ----------
+export function getScanRecords(): ScanRecord[] {
+  return get<ScanRecord[]>(KEYS.SCAN_RECORDS, [])
+}
+
+export function saveScanRecords(list: ScanRecord[]): void {
+  set(KEYS.SCAN_RECORDS, list)
 }

@@ -362,3 +362,65 @@ export async function parseVoiceCommand(
   const jsonStr = reply.replace(/```json?\s*/g, '').replace(/```/g, '').trim()
   return JSON.parse(jsonStr) as VoiceAction
 }
+
+// ---------- Feature: Receipt OCR Parsing ----------
+export interface ReceiptItem {
+  type: 'expense' | 'income' | 'transfer'
+  amount: number
+  categoryName: string
+  accountName: string
+  note: string
+  date: string
+  confidence: number // 0-1, 识别置信度
+}
+
+export async function parseReceiptText(
+  ocrText: string,
+  categories: Category[],
+  accounts: Account[]
+): Promise<ReceiptItem[]> {
+  const catNames = categories.filter((c) => c.level === 1).map((c) => c.name).join('、')
+  const accNames = accounts.map((a) => a.name).join('、')
+
+  const messages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: `你是一个智能记账归档助手。用户会给你一张票据/小票/账单截图通过 OCR 识别出的文字，你需要把这些文字整理成多条结构化记账记录。
+
+可用支出/收入分类: ${catNames}
+可用账户: ${accNames}
+今天日期: ${new Date().toISOString().slice(0, 10)}
+
+识别原则：
+1. 从文字中提取金额（¥、￥、金额数字）、消费项目/商品名、日期（可能是"2025-08-01"、"8月1日"等）、商户名称
+2. 一条小票可能有多个项目，尽量整理成一条汇总记录（note 里写主要商品），不要过度拆分
+3. 收入类（工资、报销、退款、利息等）用 type: "income"，其余支出用 type: "expense"
+4. categoryName 必须从可用分类中选择最贴近的，若没有合适分类用"其他"
+5. accountName 若识别不到，用第一个可用账户
+6. 金额必须为正数。note 写商户名 + 主要消费内容
+7. confidence 表示你对这条整理结果的把握程度：能明确金额和分类给 0.9，只有金额给 0.7，金额都不确定给 0.3
+
+返回格式（纯 JSON 数组，不要其他文字）:
+[
+  {
+    "type": "expense" | "income" | "transfer",
+    "amount": 数字(正数),
+    "categoryName": "分类名",
+    "accountName": "账户名",
+    "note": "商户 + 内容",
+    "date": "YYYY-MM-DD",
+    "confidence": 0.1到1之间的数字
+  }
+]
+
+如果完全无法识别出任何有效金额，返回空数组 []。`,
+    },
+    { role: 'user', content: `OCR 识别出的票据文字如下：\n"""\n${ocrText}\n"""` },
+  ]
+
+  const reply = await chat(messages, { temperature: 0.1 })
+  const jsonStr = reply.replace(/```json?\s*/g, '').replace(/```/g, '').trim()
+  const data = JSON.parse(jsonStr)
+  const list: ReceiptItem[] = Array.isArray(data) ? data : []
+  return list.filter((it) => it && it.amount > 0)
+}

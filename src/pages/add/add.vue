@@ -33,6 +33,13 @@
       </view>
     </view>
 
+    <!-- Scan Receipt Entry -->
+    <view class="scan-entry" @tap="goScan">
+      <text class="scan-entry-icon">📷</text>
+      <text class="scan-entry-text">扫描小票 / 账单，AI 智能归档</text>
+      <text class="scan-entry-arrow">›</text>
+    </view>
+
     <!-- Voice Recording Overlay -->
     <view v-if="isRecording" class="voice-overlay">
       <view class="voice-panel">
@@ -372,6 +379,10 @@ const aiResult = ref<{
   date: string
 } | null>(null)
 
+function goScan() {
+  uni.navigateTo({ url: '/pages/scan/scan' })
+}
+
 async function onAiParse() {
   const text = aiText.value.trim()
   if (!text || aiParsing.value) return
@@ -555,6 +566,21 @@ function stopVoiceInput() {
 .ai-send-btn.disabled { opacity: 0.5; }
 .ai-send-text { font-size: 26rpx; font-weight: 500; color: #fff; }
 .ai-loading { font-size: 26rpx; color: #fff; letter-spacing: 4rpx; }
+
+/* Scan Receipt Entry */
+.scan-entry {
+  margin: 16rpx 24rpx 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, rgba(129, 199, 132, 0.15), rgba(76, 175, 80, 0.12));
+  border: 1rpx solid rgba(76, 175, 80, 0.35);
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+}
+.scan-entry-icon { font-size: 34rpx; margin-right: 16rpx; }
+.scan-entry-text { flex: 1; font-size: 28rpx; color: #2e7d32; font-weight: 500; }
+.scan-entry-arrow { font-size: 30rpx; color: #66bb6a; }
 
 /* AI Result */
 .ai-result-bar {

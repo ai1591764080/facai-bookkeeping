@@ -1,12 +1,21 @@
 <template>
   <!-- Floating voice command bar — always visible, prominent -->
-  <view class="vc-fab" :class="state" @tap="onTap">
-    <!-- Idle state: prompt bar -->
+  <view
+    class="vc-fab"
+    :class="[state, { dragging: isDragging }]"
+    :style="fabStyle"
+    @tap="onTap"
+    @touchstart.stop="onTouchStart"
+    @touchmove.stop.prevent="onTouchMove"
+    @touchend.stop="onTouchEnd"
+    @touchcancel.stop="onTouchEnd"
+  >
+    <!-- Idle state: compact draggable pill -->
     <view v-if="state === 'idle'" class="vc-bar">
       <view class="vc-bar-mic">
         <text class="vc-mic-icon">🎙️</text>
       </view>
-      <text class="vc-hint">点击说话，语音控制记账</text>
+      <text class="vc-hint">语音记账</text>
       <view class="vc-bar-glow" />
     </view>
 
@@ -38,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { startVoice, stopVoice } from '../utils/voice'
 import { parseVoiceCommand, hasApiKey } from '../utils/ai'
 import { hasXfyunConfig } from '../utils/voice'
@@ -57,6 +66,120 @@ const interimText = ref('')
 const resultMessage = ref('')
 const resultSuccess = ref(false)
 
+// ===== 悬浮位置与拖拽 =====
+const POS_KEY = 'beecount_vc_pos'
+const fabPos = ref({ x: 0, y: 0 })
+const isDragging = ref(false)
+const hasMoved = ref(false)
+const dragOffset = ref({ dx: 0, dy: 0 })
+let vcEl: HTMLElement | null = null
+
+// 空闲胶囊约 150px 宽 / 50px 高；展开态固定宽
+function fabSize() {
+  if (state.value === 'idle') return { w: 150, h: 50 }
+  return { w: 320, h: 50 }
+}
+
+function clampPos(x: number, y: number, w: number, h: number) {
+  const vw = uni.getSystemInfoSync().windowWidth
+  const vh = uni.getSystemInfoSync().windowHeight
+  return {
+    x: Math.round(Math.min(Math.max(0, x), Math.max(0, vw - w))),
+    y: Math.round(Math.min(Math.max(0, y), Math.max(0, vh - h))),
+  }
+}
+
+function restorePos() {
+  try {
+    const saved = uni.getStorageSync(POS_KEY)
+    if (saved && typeof saved.x === 'number' && typeof saved.y === 'number') {
+      fabPos.value = { x: saved.x, y: saved.y }
+      return
+    }
+  } catch (e) { /* 忽略 */ }
+  // 默认位置：水平居中、垂直约 72% 高度（避开右下角记账按钮）
+  const vw = uni.getSystemInfoSync().windowWidth
+  const vh = uni.getSystemInfoSync().windowHeight
+  fabPos.value = clampPos(Math.round((vw - 150) / 2), Math.round(vh * 0.72), 150, 50)
+}
+
+function savePos() {
+  try { uni.setStorageSync(POS_KEY, fabPos.value) } catch (e) { /* 忽略 */ }
+}
+
+function onDragStart(clientX: number, clientY: number) {
+  if (state.value !== 'idle') return // 仅空闲态可拖动，避免误触
+  isDragging.value = true
+  hasMoved.value = false
+  dragOffset.value = { dx: clientX - fabPos.value.x, dy: clientY - fabPos.value.y }
+}
+
+function onDragMove(clientX: number, clientY: number) {
+  if (!isDragging.value) return
+  const { w, h } = fabSize()
+  const p = clampPos(clientX - dragOffset.value.dx, clientY - dragOffset.value.dy, w, h)
+  if (Math.abs(p.x - fabPos.value.x) > 2 || Math.abs(p.y - fabPos.value.y) > 2) hasMoved.value = true
+  fabPos.value = p
+}
+
+function onDragEnd() {
+  if (!isDragging.value) return
+  isDragging.value = false
+  if (hasMoved.value) savePos()
+  setTimeout(() => { hasMoved.value = false }, 60)
+}
+
+function onTouchStart(e: any) {
+  const t = e.touches && e.touches[0]
+  if (t) onDragStart(t.clientX, t.clientY)
+}
+function onTouchMove(e: any) {
+  const t = e.touches && e.touches[0]
+  if (t) onDragMove(t.clientX, t.clientY)
+}
+function onTouchEnd() { onDragEnd() }
+
+onMounted(() => {
+  restorePos()
+  // #ifdef H5
+  vcEl = document.querySelector('.vc-fab') as HTMLElement | null
+  if (vcEl) {
+    vcEl.addEventListener('mousedown', handleMouseDown)
+  }
+  // #endif
+})
+
+onBeforeUnmount(() => {
+  // #ifdef H5
+  if (vcEl) {
+    vcEl.removeEventListener('mousedown', handleMouseDown)
+    window.removeEventListener('mousemove', handleMouseMove)
+    window.removeEventListener('mouseup', handleMouseUp)
+    vcEl = null
+  }
+  // #endif
+})
+
+// #ifdef H5
+function handleMouseDown(e: MouseEvent) {
+  e.preventDefault()
+  onDragStart(e.clientX, e.clientY)
+  window.addEventListener('mousemove', handleMouseMove)
+  window.addEventListener('mouseup', handleMouseUp)
+}
+function handleMouseMove(e: MouseEvent) { onDragMove(e.clientX, e.clientY) }
+function handleMouseUp() {
+  onDragEnd()
+  window.removeEventListener('mousemove', handleMouseMove)
+  window.removeEventListener('mouseup', handleMouseUp)
+}
+// #endif
+
+const fabStyle = computed(() => ({
+  left: fabPos.value.x + 'px',
+  top: fabPos.value.y + 'px',
+}))
+
 const catStore = useCategoryStore()
 const accStore = useAccountStore()
 const ledgerStore = useLedgerStore()
@@ -65,6 +188,7 @@ const budgetStore = useBudgetStore()
 let resultTimer: ReturnType<typeof setTimeout> | null = null
 
 function onTap() {
+  if (hasMoved.value) return // 刚刚拖动过，不算点击
   if (state.value === 'idle') {
     startListening()
   }
@@ -162,14 +286,28 @@ function showResult(success: boolean, message: string) {
 </script>
 
 <style scoped>
-/* ===== Floating bar container ===== */
+/* ===== Floating draggable pill container ===== */
 .vc-fab {
   position: fixed;
-  left: 24rpx;
-  right: 24rpx;
-  bottom: 160rpx;
+  display: inline-block;
   z-index: 998;
   pointer-events: auto;
+  cursor: grab;
+  touch-action: none; /* 允许 touch 拖拽 */
+  width: max-content;
+}
+
+.vc-fab.dragging {
+  cursor: grabbing;
+  opacity: 0.9;
+}
+
+/* 非空闲态展开为固定宽度，展示更多信息 */
+.vc-fab.listening,
+.vc-fab.processing,
+.vc-fab.result {
+  width: 320px;
+  max-width: calc(100vw - 24px);
 }
 
 /* ===== Base bar style ===== */

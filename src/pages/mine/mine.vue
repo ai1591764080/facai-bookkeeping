@@ -41,6 +41,8 @@ interface MenuItem {
 }
 
 const menuItems: MenuItem[] = [
+  { icon: '🔍', label: '扫描识别记账', action: 'navigate', path: '/pages/scan/scan' },
+  { icon: '🗂️', label: '智能归档', action: 'navigate', path: '/pages/scan/archive' },
   { icon: '🤖', label: 'AI 记账助手', action: 'navigate', path: '/pages/ai/chat' },
   { icon: '📊', label: 'AI 消费洞察', action: 'navigate', path: '/pages/ai/insights' },
   { icon: '🔑', label: 'AI 设置', action: 'navigate', path: '/pages/ai/settings' },
