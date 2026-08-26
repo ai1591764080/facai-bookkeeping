@@ -1,7 +1,6 @@
 // 飞桨 AI Studio OCR 识别模块
 // 基于 PaddleOCR-VL 在线 API：识别票据 / 小票 / 账单截图中的文字
 // 官方调用方式：提交识别任务(job) -> 轮询任务状态 -> 获取 jsonl 结果(markdown 文本)
-import { hasApiKey as hasDeepSeekKey } from './ai'
 
 // ---------- 配置 ----------
 const TOKEN_KEY = 'beecount_ocr_token'
@@ -41,7 +40,64 @@ export function hasOcrConfig(): boolean {
   return !!getOcrToken()
 }
 
+// ---------- H5 跨域代理 ----------
+// H5 浏览器直连飞桨会被 CORS 拦截，通过本地 devServer 代理 /ocr-proxy 转发
+// 非 H5 端（小程序/App）无需代理，原样返回
+function toProxyUrl(fullUrl: string): string {
+  // #ifdef H5
+  // 飞桨任务接口 -> 代理 /ocr-proxy
+  if (fullUrl.startsWith('https://paddleocr.aistudio-app.com')) {
+    return '/ocr-proxy' + fullUrl.slice('https://paddleocr.aistudio-app.com'.length)
+  }
+  // 飞桨结果存储（jsonUrl 下载）-> 代理 /ocr-store-{编号}
+  // 注意：store 编号不固定（store-1/2/3/4...），签名授权与编号绑定，需保留编号
+  const m = fullUrl.match(/^https:\/\/paddleocr-store-(\d+)\.bj\.bcebos\.com(\/.*)$/)
+  if (m) return `/ocr-store-${m[1]}${m[2]}`
+  // #endif
+  return fullUrl
+}
+
 // ---------- 通用请求封装（兼容 H5 / 小程序） ----------
+// H5 端用原生 fetch：确保 FormData/multipart 传输正确、代理请求可靠
+// （uni.request 在 H5 端处理 FormData 时有兼容问题，可能被序列化成非法请求导致飞桨返回 400）
+// #ifdef H5
+function request<T>(options: {
+  url: string
+  method: 'GET' | 'POST'
+  header?: Record<string, string>
+  data?: any
+}): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const init: RequestInit = {
+      method: options.method,
+      headers: { ...(options.header || {}) },
+    }
+    if (options.method === 'POST' && options.data instanceof FormData) {
+      // FormData：交给浏览器自动设置 multipart/form-data + boundary，不要手动指定 Content-Type
+      init.body = options.data
+    } else if (options.data !== undefined) {
+      init.headers = { ...(init.headers || {}), 'Content-Type': 'application/json' }
+      init.body = JSON.stringify(options.data)
+    }
+
+    fetch(options.url, init)
+      .then(async (r) => {
+        if (!r.ok) {
+          const txt = await r.text().catch(() => '')
+          reject(new Error(`HTTP ${r.status}: ${txt.slice(0, 200)}`))
+          return
+        }
+        const type = r.headers.get('content-type') || ''
+        if (type.includes('application/json')) resolve(await r.json())
+        else resolve((await r.text()) as unknown as T)
+      })
+      .catch((err) => reject(new Error(`网络错误: ${err?.message || '请求失败'}`)))
+  })
+}
+// #endif
+
+// #ifndef H5
+// 小程序 / App 端：使用 uni.request
 function request<T>(options: {
   url: string
   method: 'GET' | 'POST'
@@ -63,12 +119,40 @@ function request<T>(options: {
     })
   })
 }
+// #endif
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 // ---------- 图片读取为 base64 ----------
+// H5 端没有 uni.getFileSystemManager，需用浏览器 API 读取图片转 base64
+// #ifdef H5
+export function readFileAsBase64(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    fetch(filePath)
+      .then((r) => {
+        if (!r.ok) throw new Error(`读取图片失败: HTTP ${r.status}`)
+        return r.blob()
+      })
+      .then((blob) => {
+        const reader = new FileReader()
+        reader.onload = () => {
+          const dataUrl = String(reader.result || '')
+          // 去掉 data:image/xxx;base64, 前缀，只保留纯 base64
+          const base64 = dataUrl.split(',')[1] || dataUrl
+          resolve(base64)
+        }
+        reader.onerror = () => reject(new Error('读取图片失败'))
+        reader.readAsDataURL(blob)
+      })
+      .catch((err) => reject(err instanceof Error ? err : new Error('读取图片失败')))
+  })
+}
+// #endif
+
+// #ifndef H5
+// 小程序 / App 端：使用 FileSystemManager 读取
 export function readFileAsBase64(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
     uni.getFileSystemManager().readFile({
@@ -79,6 +163,7 @@ export function readFileAsBase64(filePath: string): Promise<string> {
     })
   })
 }
+// #endif
 
 // ---------- 任务提交 ----------
 interface JobResponse {
@@ -101,7 +186,7 @@ interface JobResultResponse {
 
 async function submitJob(imageBase64: string): Promise<string> {
   const token = getOcrToken()
-  const url = getOcrUrl()
+  const url = toProxyUrl(getOcrUrl())
   if (!token) throw new Error('未配置飞桨 AI Studio 访问令牌')
 
   const headers = {
@@ -160,7 +245,7 @@ async function submitJob(imageBase64: string): Promise<string> {
 }
 
 async function pollJob(token: string, jobId: string): Promise<string> {
-  const url = getOcrUrl()
+  const url = toProxyUrl(getOcrUrl())
   let pollCount = 0
   while (pollCount < MAX_POLL) {
     await sleep(POLL_INTERVAL)
@@ -195,7 +280,7 @@ interface JsonlItem {
 }
 
 async function fetchResult(jsonUrl: string): Promise<string> {
-  const text = await request<string>({ url: jsonUrl, method: 'GET' })
+  const text = await request<string>({ url: toProxyUrl(jsonUrl), method: 'GET' })
   const lines = String(text)
     .split('\n')
     .map((l) => l.trim())
@@ -235,8 +320,8 @@ export async function recognizeImage(imageBase64: string): Promise<string> {
 
 // ---------- 页面提示 ----------
 export function ocrReadyHint(): string {
-  if (!hasDeepSeekKey()) {
-    return '扫描识别前请先在「我的 → AI 设置」配置 DeepSeek API Key，用于智能归档整理。'
+  if (!hasOcrConfig()) {
+    return '识别使用飞桨 AI Studio，请在「OCR配置」中填写 Access Token。'
   }
   return ''
 }

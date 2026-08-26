@@ -21,6 +21,17 @@ const showConfig = ref(false)
 const configToken = ref('')
 const configUrl = ref('')
 
+// AI 思考画面（DeepSeek 整理阶段的状态反馈）
+const aiThinking = ref(false)
+const thinkingStep = ref(0)
+let thinkingTimer: any = null
+const thinkingTexts = [
+  '正在读取票据文字…',
+  '正在分析金额与收支…',
+  '正在匹配分类与账户…',
+  '正在整理记账明细…',
+]
+
 const ctypeLabels = { expense: '支出', income: '收入', transfer: '转账' } as const
 
 const totalAmount = computed(() => candidates.value.reduce((s, c) => s + (Number(c.amount) || 0), 0))
@@ -55,19 +66,11 @@ function reChoose() {
 
 async function recognize() {
   if (!imagePath.value) return
-  if (!hasApiKey()) {
-    uni.showModal({
-      title: '缺少 AI 配置',
-      content: '智能归档需要 DeepSeek API Key，请先在「我的 → AI 设置」中配置。',
-      showCancel: false,
-    })
-    return
-  }
   loading.value = true
   try {
     const base64 = await readFileAsBase64(imagePath.value)
-    loading.value = true
     uni.showLoading({ title: 'OCR 识别中...' })
+    // 飞桨 OCR 识别（使用飞桨 AI Studio token，与 DeepSeek 无关）
     const text = await recognizeImage(base64)
     uni.hideLoading()
     if (!text.trim()) {
@@ -75,16 +78,46 @@ async function recognize() {
       return
     }
     ocrText.value = text
-    uni.showToast({ title: '识别完成，正在整理...', icon: 'none' })
-
-    // AI 整理
-    const list = await parseReceiptText(text, categoryStore.categories, accountStore.visibleAccounts)
-    candidates.value = list
+    // 先进入识别结果预览，展示 OCR 原文
     step.value = 'review'
-    if (list.length === 0) {
-      uni.showToast({ title: '未能整理出有效账单，请检查图片', icon: 'none' })
+    uni.showToast({ title: '识别完成', icon: 'none' })
+
+    // AI 智能整理（这一步才需要 DeepSeek）
+    if (!hasApiKey()) {
+      uni.showModal({
+        title: '已识别完成',
+        content: '图片文字已识别成功。智能整理记账需要 DeepSeek API Key，是否前往配置？',
+        confirmText: '去配置',
+        cancelText: '暂不',
+        success: (r) => {
+          if (r.confirm) uni.navigateTo({ url: '/pages/ai/settings' })
+        },
+      })
+      return
+    }
+
+    // 显示 AI 思考画面（DeepSeek 整理需要数秒，给用户明确反馈）
+    aiThinking.value = true
+    thinkingStep.value = 0
+    thinkingTimer = setInterval(() => {
+      thinkingStep.value = (thinkingStep.value + 1) % thinkingTexts.length
+    }, 1300)
+
+    try {
+      const list = await parseReceiptText(text, categoryStore.categories, accountStore.visibleAccounts)
+      candidates.value = list
+      if (list.length === 0) {
+        uni.showToast({ title: '未能整理出有效账单，请检查图片', icon: 'none' })
+      }
+    } finally {
+      aiThinking.value = false
+      clearInterval(thinkingTimer)
+      thinkingTimer = null
     }
   } catch (e: any) {
+    aiThinking.value = false
+    clearInterval(thinkingTimer)
+    thinkingTimer = null
     uni.hideLoading()
     uni.showToast({ title: e.message || '识别失败', icon: 'none' })
   } finally {
@@ -318,6 +351,22 @@ function onAccChange(index: number, e: any) {
       </view>
     </view>
 
+    <!-- AI 思考画面（DeepSeek 整理阶段） -->
+    <view class="thinking-mask" v-if="aiThinking">
+      <view class="thinking-card">
+        <view class="thinking-icon">
+          <view class="spinner"></view>
+          <text class="thinking-emoji">🤖</text>
+        </view>
+        <text class="thinking-title">AI 正在思考</text>
+        <text class="thinking-text">{{ thinkingTexts[thinkingStep] }}</text>
+        <view class="thinking-dots">
+          <view class="dot" v-for="i in 3" :key="i" :class="{ on: i <= (thinkingStep % 3) + 1 }"></view>
+        </view>
+        <text class="thinking-tip">正在理解票据内容并整理成记账明细，请稍候…</text>
+      </view>
+    </view>
+
     <!-- OCR 配置弹窗 -->
     <view class="mask" v-if="showConfig" @tap="showConfig = false">
       <view class="config-modal" @tap.stop>
@@ -410,6 +459,37 @@ function onAccChange(index: number, e: any) {
 .review-actions { display: flex; flex-direction: row; gap: 24rpx; }
 .btn-rescan { flex: 1; background: var(--bg); color: var(--text-secondary); border: 1rpx solid var(--border); }
 .btn-confirm { flex: 2; background: var(--primary); color: #fff; }
+
+/* AI 思考画面 */
+.thinking-mask {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 998;
+  display: flex; align-items: center; justify-content: center; flex-direction: column;
+  backdrop-filter: blur(4px);
+}
+.thinking-card {
+  width: 520rpx; background: var(--card-bg); border-radius: 28rpx; padding: 48rpx 40rpx;
+  display: flex; flex-direction: column; align-items: center;
+  box-shadow: 0 16rpx 48rpx rgba(0,0,0,0.2);
+}
+.thinking-icon { position: relative; width: 120rpx; height: 120rpx; margin-bottom: 24rpx; display: flex; align-items: center; justify-content: center; }
+.spinner {
+  position: absolute; inset: 0; border-radius: 50%;
+  border: 6rpx solid rgba(79,110,247,0.15);
+  border-top-color: var(--primary);
+  animation: thinking-spin 1s linear infinite;
+}
+.thinking-emoji { font-size: 52rpx; }
+.thinking-title { font-size: 34rpx; font-weight: 700; color: var(--text-primary); }
+.thinking-text { font-size: 28rpx; color: var(--text-secondary); margin-top: 16rpx; min-height: 40rpx; text-align: center; }
+.thinking-dots { display: flex; flex-direction: row; gap: 12rpx; margin-top: 20rpx; }
+.dot { width: 14rpx; height: 14rpx; border-radius: 50%; background: rgba(79,110,247,0.2); transition: background 0.3s; }
+.dot.on { background: var(--primary); }
+.thinking-tip { font-size: 24rpx; color: var(--text-tertiary); margin-top: 20rpx; text-align: center; }
+
+@keyframes thinking-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
 
 .mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999; display: flex; align-items: center; justify-content: center; }
 .config-modal { width: 620rpx; background: var(--card-bg); border-radius: 24rpx; padding: 40rpx; }

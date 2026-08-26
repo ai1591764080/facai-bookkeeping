@@ -48,6 +48,6 @@
   "vueVersion": "3",
   "h5": {
     "router": { "mode": "hash" },
-    "devServer": { "port": 8080, "host": "0.0.0.0", "https": true }
+    "devServer": { "port": 5173, "host": "0.0.0.0", "https": false }
   }
 }
