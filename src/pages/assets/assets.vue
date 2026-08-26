@@ -99,13 +99,13 @@
       <text class="fab-icon">+</text>
     </view>
 
-    <VoiceCommander />
+    <DraggableDock />
   </view>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import VoiceCommander from '../../components/VoiceCommander.vue'
+import DraggableDock from '../../components/DraggableDock.vue'
 import { useAccountStore } from '../../stores'
 import { formatAmount } from '../../utils/format'
 

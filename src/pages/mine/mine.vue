@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import VoiceCommander from '../../components/VoiceCommander.vue'
+import DraggableDock from '../../components/DraggableDock.vue'
 import { useSettingsStore } from '../../stores'
 
 const settingsStore = useSettingsStore()
@@ -160,7 +160,7 @@ function getRightText(item: MenuItem): string {
       <text class="version-text">发财记账 v1.0.0</text>
     </view>
 
-    <VoiceCommander />
+    <DraggableDock />
   </view>
 </template>
 

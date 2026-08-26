@@ -104,15 +104,8 @@
       <view style="height: 160rpx;"></view>
     </scroll-view>
 
-    <!-- Floating Add Button -->
-    <view class="fab" @tap="goAdd">
-      <text class="fab-icon">+</text>
-    </view>
-
-    <!-- Floating AI Chat Button -->
-    <view class="fab-ai" @tap="goAiChat">
-      <text class="fab-ai-icon">🤖</text>
-    </view>
+    <!-- Floating Dock: 添加 / AI / 语音（可拖拽、贴边折叠） -->
+    <DraggableDock />
 
     <!-- Ledger Picker Popup -->
     <view v-if="showLedgerPicker" class="overlay" @tap="toggleLedgerPicker">
@@ -131,13 +124,12 @@
       </view>
     </view>
 
-    <VoiceCommander />
   </view>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import VoiceCommander from '../../components/VoiceCommander.vue'
+import DraggableDock from '../../components/DraggableDock.vue'
 import { useTransactionStore, useCategoryStore, useLedgerStore, useAccountStore } from '../../stores'
 import { getDateLabel, formatAmount } from '../../utils/format'
 
@@ -229,14 +221,6 @@ function getCategoryName(categoryId: string): string {
 }
 
 // Navigation
-function goAdd() {
-  uni.navigateTo({ url: '/pages/add/add' })
-}
-
-function goAiChat() {
-  uni.navigateTo({ url: '/pages/ai/chat' })
-}
-
 function goAiInsights() {
   uni.navigateTo({ url: '/pages/ai/insights' })
 }
@@ -417,58 +401,6 @@ function onRefresh() {
 /* Override list-item last-child border */
 .tx-group-body .list-item:last-child {
   border-bottom: none;
-}
-
-/* Floating Action Button */
-.fab {
-  position: fixed;
-  right: 40rpx;
-  bottom: 200rpx;
-  width: 112rpx;
-  height: 112rpx;
-  border-radius: 50%;
-  background: var(--primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 8rpx 28rpx rgba(79, 110, 247, 0.4);
-  z-index: 90;
-}
-
-.fab:active {
-  transform: scale(0.92);
-}
-
-.fab-icon {
-  font-size: 56rpx;
-  color: #ffffff;
-  font-weight: 300;
-  line-height: 1;
-  margin-top: -4rpx;
-}
-
-/* AI FAB */
-.fab-ai {
-  position: fixed;
-  right: 40rpx;
-  bottom: 340rpx;
-  width: 96rpx;
-  height: 96rpx;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 8rpx 28rpx rgba(102, 126, 234, 0.4);
-  z-index: 90;
-}
-
-.fab-ai:active {
-  transform: scale(0.92);
-}
-
-.fab-ai-icon {
-  font-size: 44rpx;
 }
 
 /* AI Quick Bar */
