@@ -4,15 +4,15 @@
  * Takes a parsed VoiceAction and executes it against the Pinia stores.
  * Returns a human-readable result message.
  */
-import type { VoiceAction } from './ai'
+import type { VoiceAction } from './ai' // AI 解析出的语音动作类型
 import {
   useTransactionStore,
   useCategoryStore,
   useAccountStore,
   useLedgerStore,
   useBudgetStore,
-} from '../stores'
-import { uuid } from './uuid'
+} from '../stores' // 交易/分类/账户/账本/预算状态仓库，执行命令时读写数据
+import { uuid } from './uuid' // 生成唯一 ID
 
 export interface CommandResult {
   success: boolean

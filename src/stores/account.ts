@@ -1,8 +1,8 @@
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import type { Account } from '../types'
-import { getAccounts, saveAccounts, addAccount as dbAdd, updateAccount as dbUpdate, deleteAccount as dbDelete } from '../utils/db'
-import { uuid } from '../utils/uuid'
+import { defineStore } from 'pinia' // Pinia：defineStore 定义响应式状态仓库
+import { ref, computed } from 'vue' // Vue 响应式：ref 声明响应式数据，computed 派生计算值
+import type { Account } from '../types' // 账户的类型定义
+import { getAccounts, saveAccounts, addAccount as dbAdd, updateAccount as dbUpdate, deleteAccount as dbDelete } from '../utils/db' // 本地存储封装：读取/保存/增删账户
+import { uuid } from '../utils/uuid' // 生成唯一 ID
 
 export const useAccountStore = defineStore('account', () => {
   const accounts = ref<Account[]>(loadAccounts())

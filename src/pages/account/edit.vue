@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useAccountStore } from '../../stores'
-import { uuid } from '../../utils/uuid'
-import { onLoad } from '@dcloudio/uni-app'
-import type { AccountType } from '../../types'
+import { ref, computed } from 'vue' // Vue 响应式：ref 声明响应式数据，computed 派生计算值
+import { useAccountStore } from '../../stores' // 账户状态仓库
+import { uuid } from '../../utils/uuid' // 生成唯一 ID
+import { onLoad } from '@dcloudio/uni-app' // uni-app 生命周期钩子：onLoad 页面加载时触发
+import type { AccountType } from '../../types' // 账户类型的类型定义
 
 const accountStore = useAccountStore()
 

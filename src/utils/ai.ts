@@ -1,5 +1,5 @@
-import type { Transaction, Category, Account } from '../types'
-import { formatAmount } from './format'
+import type { Transaction, Category, Account } from '../types' // 交易/分类/账户的类型定义
+import { formatAmount } from './format' // 金额格式化工具
 
 // ---------- Config ----------
 const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions'

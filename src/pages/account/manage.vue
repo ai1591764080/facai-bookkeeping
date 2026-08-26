@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useAccountStore } from '../../stores'
-import type { Account } from '../../types'
+import { computed } from 'vue' // Vue 响应式：computed 派生计算值
+import { useAccountStore } from '../../stores' // 账户状态仓库
+import type { Account } from '../../types' // 账户的类型定义
 
 const accountStore = useAccountStore()
 

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useBudgetStore, useTransactionStore, useCategoryStore, useLedgerStore } from '../../stores'
-import { onLoad } from '@dcloudio/uni-app'
-import type { Budget, BudgetPeriod } from '../../types'
+import { ref, computed } from 'vue' // Vue 响应式：ref 声明响应式数据，computed 派生计算值
+import { useBudgetStore, useTransactionStore, useCategoryStore, useLedgerStore } from '../../stores' // 预算/交易/分类/账本状态仓库
+import { onLoad } from '@dcloudio/uni-app' // uni-app 生命周期钩子：onLoad 页面加载时触发
+import type { Budget, BudgetPeriod } from '../../types' // 预算及其周期的类型定义
 
 const budgetStore = useBudgetStore()
 const transactionStore = useTransactionStore()

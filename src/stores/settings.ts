@@ -1,5 +1,5 @@
-import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { defineStore } from 'pinia' // Pinia：defineStore 定义响应式状态仓库
+import { ref } from 'vue' // Vue 响应式：ref 声明响应式数据
 
 export const useSettingsStore = defineStore('settings', () => {
   const theme = ref<'light' | 'dark'>(

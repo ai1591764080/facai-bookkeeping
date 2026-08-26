@@ -1,8 +1,8 @@
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import type { Ledger } from '../types'
-import { getLedgers, saveLedgers, getCurrentLedgerId, setCurrentLedgerId } from '../utils/db'
-import { uuid } from '../utils/uuid'
+import { defineStore } from 'pinia' // Pinia：defineStore 定义响应式状态仓库
+import { ref, computed } from 'vue' // Vue 响应式：ref 声明响应式数据，computed 派生计算值
+import type { Ledger } from '../types' // 账本的类型定义
+import { getLedgers, saveLedgers, getCurrentLedgerId, setCurrentLedgerId } from '../utils/db' // 本地存储封装：读取/保存账本、读写当前账本 ID
+import { uuid } from '../utils/uuid' // 生成唯一 ID
 
 export const useLedgerStore = defineStore('ledger', () => {
   const ledgers = ref<Ledger[]>(loadLedgers())

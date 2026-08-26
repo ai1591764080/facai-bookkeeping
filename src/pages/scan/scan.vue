@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
-import { useCategoryStore, useAccountStore, useLedgerStore, useTransactionStore, useScanStore } from '../../stores'
-import { recognizeImage, readFileAsBase64, getOcrToken, setOcrToken, getOcrUrl, setOcrUrl, hasOcrConfig } from '../../utils/ocr'
-import { parseReceiptText, hasApiKey } from '../../utils/ai'
-import type { ScanCandidate } from '../../types'
+import { ref, computed } from 'vue' // Vue 响应式：ref 声明响应式数据，computed 派生计算值
+import { onLoad } from '@dcloudio/uni-app' // uni-app 生命周期钩子：onLoad 页面加载时触发
+import { useCategoryStore, useAccountStore, useLedgerStore, useTransactionStore, useScanStore } from '../../stores' // 分类/账户/账本/交易/扫描状态仓库
+import { recognizeImage, readFileAsBase64, getOcrToken, setOcrToken, getOcrUrl, setOcrUrl, hasOcrConfig } from '../../utils/ocr' // 飞桨 OCR 识别、图片转 Base64、OCR Token/URL 配置读写
+import { parseReceiptText, hasApiKey } from '../../utils/ai' // AI 解析票据原文为记账信息、检查 API Key
+import type { ScanCandidate } from '../../types' // 扫描候选账单的类型定义
 
 const categoryStore = useCategoryStore()
 const accountStore = useAccountStore()

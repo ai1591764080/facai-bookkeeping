@@ -47,17 +47,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { startVoice, stopVoice } from '../utils/voice'
-import { parseVoiceCommand, hasApiKey } from '../utils/ai'
-import { hasXfyunConfig } from '../utils/voice'
-import { executeCommand } from '../utils/command'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue' // Vue 组合式 API：ref/computed 响应式，onMounted/onBeforeUnmount 生命周期
+import { startVoice, stopVoice } from '../utils/voice' // 跨平台语音识别（讯飞/微信插件）
+import { parseVoiceCommand, hasApiKey } from '../utils/ai' // AI 解析语音文本为记账动作，检查是否已配置 API Key
+import { hasXfyunConfig } from '../utils/voice' // 检查是否已配置讯飞语音识别
+import { executeCommand } from '../utils/command' // 执行解析出的记账命令并返回结果
 import {
   useCategoryStore,
   useAccountStore,
   useLedgerStore,
   useBudgetStore,
-} from '../stores'
+} from '../stores' // 分类/账户/账本/预算状态仓库
 
 type State = 'idle' | 'listening' | 'processing' | 'result'
 

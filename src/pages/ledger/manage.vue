@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useLedgerStore } from '../../stores'
-import type { Ledger } from '../../types'
+import { ref, computed } from 'vue' // Vue 响应式：ref 声明响应式数据，computed 派生计算值
+import { useLedgerStore } from '../../stores' // 账本状态仓库
+import type { Ledger } from '../../types' // 账本的类型定义
 
 const ledgerStore = useLedgerStore()
 

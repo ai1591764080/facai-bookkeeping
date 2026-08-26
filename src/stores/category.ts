@@ -1,9 +1,9 @@
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import type { Category } from '../types'
-import { getCategories, saveCategories } from '../utils/db'
-import { buildDefaultCategories } from '../utils/defaults'
-import { uuid } from '../utils/uuid'
+import { defineStore } from 'pinia' // Pinia：defineStore 定义响应式状态仓库
+import { ref, computed } from 'vue' // Vue 响应式：ref 声明响应式数据，computed 派生计算值
+import type { Category } from '../types' // 分类的类型定义
+import { getCategories, saveCategories } from '../utils/db' // 本地存储封装：读取/保存分类
+import { buildDefaultCategories } from '../utils/defaults' // 生成内置默认分类数据
+import { uuid } from '../utils/uuid' // 生成唯一 ID
 
 export const useCategoryStore = defineStore('category', () => {
   const categories = ref<Category[]>(loadCategories())

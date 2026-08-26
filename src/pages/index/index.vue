@@ -128,10 +128,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import DraggableDock from '../../components/DraggableDock.vue'
-import { useTransactionStore, useCategoryStore, useLedgerStore, useAccountStore } from '../../stores'
-import { getDateLabel, formatAmount } from '../../utils/format'
+import { ref, computed } from 'vue' // Vue 响应式：ref 声明响应式数据，computed 派生计算值
+import DraggableDock from '../../components/DraggableDock.vue' // 可拖拽、贴边折叠的工具条（添加/AI/语音）
+import { useTransactionStore, useCategoryStore, useLedgerStore, useAccountStore } from '../../stores' // 交易/分类/账本/账户状态仓库
+import { getDateLabel, formatAmount } from '../../utils/format' // 日期标签与金额格式化工具
 
 const txStore = useTransactionStore()
 const catStore = useCategoryStore()

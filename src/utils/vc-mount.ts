@@ -3,9 +3,9 @@
  * Creates a container in <body> and mounts the VoiceCommander component
  * using a separate Vue app that shares the main app's Pinia stores.
  */
-import { createApp, h } from 'vue'
-import VoiceCommander from '../components/VoiceCommander.vue'
-import { getSharedPinia } from './shared-pinia'
+import { createApp, h } from 'vue' // Vue 核心：createApp 创建独立应用实例，h 创建虚拟节点
+import VoiceCommander from '../components/VoiceCommander.vue' // 语音记账组件（DOM 注入）
+import { getSharedPinia } from './shared-pinia' // 共享 Pinia：让独立应用复用主应用的 store
 
 let mounted = false
 

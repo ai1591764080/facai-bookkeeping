@@ -1,4 +1,4 @@
-import type { Transaction, Category, Account, Ledger, Budget, Tag, AABill, ScanRecord } from '../types'
+import type { Transaction, Category, Account, Ledger, Budget, Tag, AABill, ScanRecord } from '../types' // 各类业务实体的类型定义
 
 const KEYS = {
   TRANSACTIONS: 'beecount_transactions',

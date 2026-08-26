@@ -1,8 +1,8 @@
-import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import type { Budget } from '../types'
-import { getBudgets, saveBudgets } from '../utils/db'
-import { uuid } from '../utils/uuid'
+import { defineStore } from 'pinia' // Pinia：defineStore 定义响应式状态仓库
+import { ref } from 'vue' // Vue 响应式：ref 声明响应式数据
+import type { Budget } from '../types' // 预算的类型定义
+import { getBudgets, saveBudgets } from '../utils/db' // 本地存储封装：读取/保存预算
+import { uuid } from '../utils/uuid' // 生成唯一 ID
 
 export const useBudgetStore = defineStore('budget', () => {
   const budgets = ref<Budget[]>(getBudgets())

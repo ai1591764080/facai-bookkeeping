@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { uuid } from '../../utils/uuid'
-import { getAABills, saveAABills } from '../../utils/db'
-import type { AABill } from '../../types'
+import { ref, computed } from 'vue' // Vue 响应式：ref 声明响应式数据，computed 派生计算值
+import { uuid } from '../../utils/uuid' // 生成唯一 ID
+import { getAABills, saveAABills } from '../../utils/db' // 本地存储封装：读取/保存 AA 账单
+import type { AABill } from '../../types' // AA 账单的类型定义
 
 // Local member management
 interface Member {

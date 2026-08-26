@@ -1,5 +1,5 @@
-import type { Category } from '../types'
-import { uuid } from '../utils/uuid'
+import type { Category } from '../types' // 分类的类型定义
+import { uuid } from '../utils/uuid' // 生成唯一 ID
 
 export const DEFAULT_EXPENSE_CATEGORIES: Omit<Category, 'id'>[] = [
   { name: '餐饮', kind: 'expense', icon: '🍜', sortOrder: 1, parentId: null, level: 1 },

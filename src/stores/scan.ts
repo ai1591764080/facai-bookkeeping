@@ -1,8 +1,8 @@
-import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import type { ScanRecord, ScanCandidate, Transaction, Category, Account } from '../types'
-import { getScanRecords, saveScanRecords } from '../utils/db'
-import { uuid } from '../utils/uuid'
+import { defineStore } from 'pinia' // Pinia：defineStore 定义响应式状态仓库
+import { ref } from 'vue' // Vue 响应式：ref 声明响应式数据
+import type { ScanRecord, ScanCandidate, Transaction, Category, Account } from '../types' // 扫描记录/候选账单/交易/分类/账户类型定义
+import { getScanRecords, saveScanRecords } from '../utils/db' // 本地存储封装：读取/保存扫描记录
+import { uuid } from '../utils/uuid' // 生成唯一 ID
 
 function buildTransaction(candidate: ScanCandidate, category: Category, account: Account, ledgerId: string): Transaction {
   const now = new Date().toISOString()

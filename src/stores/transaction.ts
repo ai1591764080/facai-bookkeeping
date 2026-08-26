@@ -1,7 +1,7 @@
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import type { Transaction } from '../types'
-import { getTransactions, saveTransactions, addTransaction as dbAdd, updateTransaction as dbUpdate, deleteTransaction as dbDelete } from '../utils/db'
+import { defineStore } from 'pinia' // Pinia：defineStore 定义一个响应式状态仓库
+import { ref, computed } from 'vue' // Vue 响应式：ref 声明响应式数据，computed 派生计算值
+import type { Transaction } from '../types' // 交易记录的类型定义
+import { getTransactions, saveTransactions, addTransaction as dbAdd, updateTransaction as dbUpdate, deleteTransaction as dbDelete } from '../utils/db' // 本地存储封装：读取/保存/增删交易记录
 
 export const useTransactionStore = defineStore('transaction', () => {
   const transactions = ref<Transaction[]>(getTransactions())

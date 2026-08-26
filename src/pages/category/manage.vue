@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useCategoryStore } from '../../stores'
-import type { Category } from '../../types'
+import { ref, computed } from 'vue' // Vue 响应式：ref 声明响应式数据，computed 派生计算值
+import { useCategoryStore } from '../../stores' // 分类状态仓库
+import type { Category } from '../../types' // 分类的类型定义
 
 const categoryStore = useCategoryStore()
 

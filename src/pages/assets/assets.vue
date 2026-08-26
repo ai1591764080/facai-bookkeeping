@@ -104,10 +104,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import DraggableDock from '../../components/DraggableDock.vue'
-import { useAccountStore } from '../../stores'
-import { formatAmount } from '../../utils/format'
+import { ref, computed } from 'vue' // Vue 响应式：ref 声明响应式数据，computed 派生计算值
+import DraggableDock from '../../components/DraggableDock.vue' // 可拖拽、贴边折叠的工具条（添加/AI/语音）
+import { useAccountStore } from '../../stores' // 账户状态仓库
+import { formatAmount } from '../../utils/format' // 金额格式化工具
 
 const accountStore = useAccountStore()
 

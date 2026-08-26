@@ -143,10 +143,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import VoiceCommander from '../../components/VoiceCommander.vue'
-import { setApiKey, hasApiKey as checkHasApiKey } from '../../utils/ai'
-import { setXfyunConfig, hasXfyunConfig, getXfyunConfig } from '../../utils/voice'
+import { ref, onMounted } from 'vue' // Vue 响应式与生命周期：ref 响应式，onMounted 组件挂载后触发
+import VoiceCommander from '../../components/VoiceCommander.vue' // 语音记账组件
+import { setApiKey, hasApiKey as checkHasApiKey } from '../../utils/ai' // 保存/读取 AI API Key
+import { setXfyunConfig, hasXfyunConfig, getXfyunConfig } from '../../utils/voice' // 讯飞语音识别配置的写入/检查/读取
 
 const apiKey = ref('')
 const showKey = ref(false)

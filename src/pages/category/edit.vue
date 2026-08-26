@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useCategoryStore } from '../../stores'
-import { uuid } from '../../utils/uuid'
-import { onLoad } from '@dcloudio/uni-app'
-import type { Category, TransactionType } from '../../types'
+import { ref, computed } from 'vue' // Vue 响应式：ref 声明响应式数据，computed 派生计算值
+import { useCategoryStore } from '../../stores' // 分类状态仓库
+import { uuid } from '../../utils/uuid' // 生成唯一 ID
+import { onLoad } from '@dcloudio/uni-app' // uni-app 生命周期钩子：onLoad 页面加载时触发
+import type { Category, TransactionType } from '../../types' // 分类与交易类型的类型定义
 
 const categoryStore = useCategoryStore()
 

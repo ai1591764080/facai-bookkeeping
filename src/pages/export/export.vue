@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useTransactionStore, useCategoryStore, useAccountStore, useLedgerStore } from '../../stores'
-import type { Transaction } from '../../types'
+import { ref, computed } from 'vue' // Vue 响应式：ref 声明响应式数据，computed 派生计算值
+import { useTransactionStore, useCategoryStore, useAccountStore, useLedgerStore } from '../../stores' // 交易/分类/账户/账本状态仓库
+import type { Transaction } from '../../types' // 交易记录的类型定义
 
 const transactionStore = useTransactionStore()
 const categoryStore = useCategoryStore()

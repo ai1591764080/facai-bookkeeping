@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import DraggableDock from '../../components/DraggableDock.vue'
-import { useSettingsStore } from '../../stores'
+import { computed } from 'vue' // Vue 响应式：computed 派生计算值
+import DraggableDock from '../../components/DraggableDock.vue' // 可拖拽、贴边折叠的工具条（添加/AI/语音）
+import { useSettingsStore } from '../../stores' // 设置状态仓库
 
 const settingsStore = useSettingsStore()
 

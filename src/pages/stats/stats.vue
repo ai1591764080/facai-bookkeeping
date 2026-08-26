@@ -139,10 +139,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
-import DraggableDock from '../../components/DraggableDock.vue'
-import { useTransactionStore, useCategoryStore, useLedgerStore } from '../../stores'
-import { formatAmount } from '../../utils/format'
+import { ref, computed, onMounted, watch, nextTick } from 'vue' // Vue 响应式与生命周期：ref/computed 响应式，onMounted/watch 生命周期与侦听，nextTick 渲染后操作
+import DraggableDock from '../../components/DraggableDock.vue' // 可拖拽、贴边折叠的工具条（添加/AI/语音）
+import { useTransactionStore, useCategoryStore, useLedgerStore } from '../../stores' // 交易/分类/账本状态仓库
+import { formatAmount } from '../../utils/format' // 金额格式化工具
 
 const transactionStore = useTransactionStore()
 const categoryStore = useCategoryStore()
@@ -489,7 +489,7 @@ watch([barData, scope, currentType, currentYear, currentMonth], () => {
 })
 
 // Lifecycle
-import { getCurrentInstance } from 'vue'
+import { getCurrentInstance } from 'vue' // Vue 组合式 API：getCurrentInstance 获取当前组件实例
 
 onMounted(() => {
   const sysInfo = uni.getSystemInfoSync()

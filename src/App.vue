@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onLaunch } from '@dcloudio/uni-app'
-import { useLedgerStore, useCategoryStore, useAccountStore } from './stores'
+import { onLaunch } from '@dcloudio/uni-app' // uni-app 生命周期钩子：onLaunch 在应用启动时执行一次
+import { useLedgerStore, useCategoryStore, useAccountStore } from './stores' // 账本/分类/账户 store：启动时初始化默认数据
 
 onLaunch(() => {
   // Initialize stores - this triggers default data creation on first launch

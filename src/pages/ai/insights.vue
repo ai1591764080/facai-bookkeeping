@@ -120,11 +120,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import VoiceCommander from '../../components/VoiceCommander.vue'
-import { useTransactionStore, useCategoryStore, useAccountStore, useLedgerStore, useAiStore, useBudgetStore } from '../../stores'
-import { formatAmount } from '../../utils/format'
-import { generateSpendingInsights, predictBudget, hasApiKey } from '../../utils/ai'
+import { ref, computed } from 'vue' // Vue 响应式：ref 声明响应式数据，computed 派生计算值
+import VoiceCommander from '../../components/VoiceCommander.vue' // 语音记账组件
+import { useTransactionStore, useCategoryStore, useAccountStore, useLedgerStore, useAiStore, useBudgetStore } from '../../stores' // 交易/分类/账户/账本/AI/预算状态仓库
+import { formatAmount } from '../../utils/format' // 金额格式化工具
+import { generateSpendingInsights, predictBudget, hasApiKey } from '../../utils/ai' // 生成消费洞察、预测预算、检查 API Key
 
 const txStore = useTransactionStore()
 const catStore = useCategoryStore()

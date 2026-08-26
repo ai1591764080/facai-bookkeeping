@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useCategoryStore, useAccountStore, useLedgerStore, useTransactionStore, useScanStore } from '../../stores'
+import { computed } from 'vue' // Vue 响应式：computed 派生计算值
+import { useCategoryStore, useAccountStore, useLedgerStore, useTransactionStore, useScanStore } from '../../stores' // 分类/账户/账本/交易/扫描状态仓库
 
 const categoryStore = useCategoryStore()
 const accountStore = useAccountStore()

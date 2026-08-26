@@ -179,13 +179,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import VoiceCommander from '../../components/VoiceCommander.vue'
-import { useTransactionStore, useCategoryStore, useAccountStore, useLedgerStore } from '../../stores'
-import { uuid } from '../../utils/uuid'
-import { parseNaturalLanguage, hasApiKey } from '../../utils/ai'
-import { startVoice, stopVoice, isSupported as isVoiceSupported } from '../../utils/voice'
-import type { TransactionType } from '../../types'
+import { ref, computed, watch } from 'vue' // Vue 响应式与侦听器：ref/computed 响应式，watch 监听变化
+import VoiceCommander from '../../components/VoiceCommander.vue' // 语音记账组件
+import { useTransactionStore, useCategoryStore, useAccountStore, useLedgerStore } from '../../stores' // 交易/分类/账户/账本状态仓库
+import { uuid } from '../../utils/uuid' // 生成唯一 ID
+import { parseNaturalLanguage, hasApiKey } from '../../utils/ai' // 自然语言解析为记账信息、检查 API Key
+import { startVoice, stopVoice, isSupported as isVoiceSupported } from '../../utils/voice' // 语音识别控制与能力检测
+import type { TransactionType } from '../../types' // 交易类型（支出/收入）类型定义
 
 const txStore = useTransactionStore()
 const catStore = useCategoryStore()
