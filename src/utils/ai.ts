@@ -2,18 +2,194 @@ import type { Transaction, Category, Account } from '../types' // 交易/分类/
 import { formatAmount } from './format' // 金额格式化工具
 
 // ---------- Config ----------
-const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions'
+// 说明：所有 AI 能力统一走「对话补全」接口。
+// 主流厂商（DeepSeek / OpenAI / 通义千问 / 智谱 / Kimi / 豆包 / 硅基流动 / Groq / Ollama…）
+// 都兼容 OpenAI 的 chat completions 协议；Anthropic（Claude）使用原生 messages 协议，已单独适配。
+// 因此本项目可接入「任意 OpenAI 兼容」的服务或中转网关，也可直连 Claude。
 
-function getApiKey(): string {
-  return uni.getStorageSync('beecount_ai_apikey') || ''
+export interface AIProvider {
+  key: string
+  name: string
+  baseUrl: string
+  model: string
+  keyHint: string
+  doc: string
+  optionalKey?: boolean // 本地模型等场景可无需 Key
+}
+
+export const AI_PROVIDERS: AIProvider[] = [
+  {
+    key: 'deepseek',
+    name: 'DeepSeek',
+    baseUrl: 'https://api.deepseek.com/v1/chat/completions',
+    model: 'deepseek-chat',
+    keyHint: 'sk-',
+    doc: 'platform.deepseek.com → API Keys',
+  },
+  {
+    key: 'openai',
+    name: 'OpenAI',
+    baseUrl: 'https://api.openai.com/v1/chat/completions',
+    model: 'gpt-4o-mini',
+    keyHint: 'sk-',
+    doc: 'platform.openai.com → API keys',
+  },
+  {
+    key: 'qwen',
+    name: '通义千问（阿里云）',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+    model: 'qwen-plus',
+    keyHint: 'sk-',
+    doc: 'bailian.console.aliyun.com → API-KEY 管理',
+  },
+  {
+    key: 'zhipu',
+    name: '智谱 GLM',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+    model: 'glm-4-flash',
+    keyHint: '可留空前缀',
+    doc: 'open.bigmodel.cn → API Keys',
+  },
+  {
+    key: 'moonshot',
+    name: 'Kimi（月之暗面）',
+    baseUrl: 'https://api.moonshot.cn/v1/chat/completions',
+    model: 'moonshot-v1-8k',
+    keyHint: 'sk-',
+    doc: 'platform.moonshot.cn → API Key 管理',
+  },
+  {
+    key: 'doubao',
+    name: '豆包（火山方舟）',
+    baseUrl: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
+    model: 'doubao-pro-32k',
+    keyHint: '可留空前缀',
+    doc: 'console.volcengine.com/ark → API Key',
+  },
+  {
+    key: 'siliconflow',
+    name: '硅基流动 SiliconFlow',
+    baseUrl: 'https://api.siliconflow.cn/v1/chat/completions',
+    model: 'Qwen/Qwen2.5-7B-Instruct',
+    keyHint: 'sk-',
+    doc: 'cloud.siliconflow.cn → API 密钥',
+  },
+  {
+    key: 'groq',
+    name: 'Groq',
+    baseUrl: 'https://api.groq.com/openai/v1/chat/completions',
+    model: 'llama-3.3-70b-versatile',
+    keyHint: 'gsk_',
+    doc: 'console.groq.com → API Keys',
+  },
+  {
+    key: 'anthropic',
+    name: 'Anthropic Claude',
+    baseUrl: 'https://api.anthropic.com/v1/messages',
+    model: 'claude-3-5-sonnet-latest',
+    keyHint: 'sk-ant-',
+    doc: 'console.anthropic.com → API keys',
+  },
+  {
+    key: 'ollama',
+    name: 'Ollama（本地）',
+    baseUrl: 'http://localhost:11434/v1/chat/completions',
+    model: 'qwen2.5:7b',
+    keyHint: '本地无需 Key',
+    doc: '本地部署，Key 可留空或填任意字符',
+    optionalKey: true,
+  },
+  {
+    key: 'custom',
+    name: '自定义（OpenAI 兼容）',
+    baseUrl: '',
+    model: '',
+    keyHint: '由服务商决定',
+    doc: '填写任意 OpenAI 兼容的 /chat/completions 地址（含各类中转/网关）',
+  },
+]
+
+export interface AIConfig {
+  provider: string // AI_PROVIDERS 中的 key
+  baseUrl: string // 完整的对话补全接口地址
+  apiKey: string
+  model: string
+}
+
+const CONFIG_KEY = 'beecount_ai_config'
+const LEGACY_APIKEY_KEY = 'beecount_ai_apikey'
+const LEGACY_MODEL_KEY = 'beecount_ai_model'
+
+function defaultConfig(): AIConfig {
+  const p = AI_PROVIDERS[0]
+  return { provider: p.key, baseUrl: p.baseUrl, apiKey: '', model: p.model }
+}
+
+/** 读取当前 AI 配置；无配置时自动迁移旧版仅存 API Key 的数据 */
+export function getAIConfig(): AIConfig {
+  const raw = uni.getStorageSync(CONFIG_KEY)
+  if (raw) {
+    try {
+      const cfg = typeof raw === 'string' ? JSON.parse(raw) : raw
+      if (cfg && typeof cfg === 'object') {
+        return { ...defaultConfig(), ...cfg }
+      }
+    } catch (e) {
+      // 存储内容损坏时回退到默认配置
+    }
+  }
+  // 兼容旧版本：只有 API Key（默认 DeepSeek）
+  const legacyKey: string = uni.getStorageSync(LEGACY_APIKEY_KEY) || ''
+  if (legacyKey) {
+    const legacyModel: string = uni.getStorageSync(LEGACY_MODEL_KEY) || ''
+    const base = AI_PROVIDERS[0]
+    return {
+      provider: base.key,
+      baseUrl: base.baseUrl,
+      apiKey: legacyKey,
+      model: legacyModel || base.model,
+    }
+  }
+  return defaultConfig()
+}
+
+/** 写入 AI 配置（局部更新，未传字段保持原值） */
+export function setAIConfig(patch: Partial<AIConfig>) {
+  const next = { ...getAIConfig(), ...patch }
+  uni.setStorageSync(CONFIG_KEY, JSON.stringify(next))
+  // 同步一份到旧存储键，便于旧版本逻辑读取
+  uni.setStorageSync(LEGACY_APIKEY_KEY, next.apiKey)
+  return next
+}
+
+export function getApiKey(): string {
+  return getAIConfig().apiKey
 }
 
 export function setApiKey(key: string) {
-  uni.setStorageSync('beecount_ai_apikey', key)
+  setAIConfig({ apiKey: key })
 }
 
 export function hasApiKey(): boolean {
-  return !!getApiKey()
+  const cfg = getAIConfig()
+  const p = AI_PROVIDERS.find((x) => x.key === cfg.provider)
+  if (p?.optionalKey) return !!cfg.baseUrl
+  return !!cfg.apiKey
+}
+
+/** 补全接口地址：用户可只填根域名或 /v1，自动补齐为完整对话补全地址 */
+export function normalizeUrl(raw: string): string {
+  let u = (raw || '').trim().replace(/\/+$/, '')
+  if (!u) return ''
+  if (/\/chat\/completions$/i.test(u)) return u
+  if (/\/messages$/i.test(u)) return u // Anthropic 原生端点
+  if (/\/v\d+$/i.test(u)) return `${u}/chat/completions`
+  return `${u}/v1/chat/completions`
+}
+
+/** 根据地址判断协议：Anthropic 走原生 messages 协议，其余按 OpenAI 兼容处理 */
+function detectProtocol(url: string): 'openai' | 'anthropic' {
+  return /anthropic\.com|\/v1\/messages$/i.test(url) ? 'anthropic' : 'openai'
 }
 
 // ---------- Core request ----------
@@ -22,39 +198,145 @@ interface ChatMessage {
   content: string
 }
 
-interface DeepSeekResponse {
+interface ChatCompletionResponse {
   choices: { message: { role: string; content: string } }[]
+}
+
+interface AnthropicResponse {
+  content: { type: string; text?: string }[]
+}
+
+/** 从各家不同格式的错误响应中提取可读信息 */
+function extractError(data: any): string {
+  if (!data) return '无响应内容'
+  if (typeof data === 'string') return data.slice(0, 200)
+  const err = data.error
+  if (err) return typeof err === 'string' ? err : err.message || JSON.stringify(err)
+  return JSON.stringify(data).slice(0, 200)
+}
+
+function request<T>(opts: {
+  url: string
+  header: Record<string, string>
+  data: unknown
+}): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    uni.request({
+      url: opts.url,
+      method: 'POST',
+      header: opts.header,
+      data: opts.data as any,
+      success: (r: any) => {
+        if (r.statusCode >= 200 && r.statusCode < 300) resolve(r.data as T)
+        else reject(new Error(`API 错误 ${r.statusCode}：${extractError(r.data)}`))
+      },
+      fail: (e: any) => reject(new Error(`网络错误：${e.errMsg}`)),
+    })
+  })
+}
+
+async function chatOpenAI(
+  url: string,
+  apiKey: string,
+  model: string,
+  messages: ChatMessage[],
+  temperature?: number
+): Promise<string> {
+  const res = await request<ChatCompletionResponse>({
+    url,
+    header: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    data: {
+      model,
+      messages,
+      temperature: temperature ?? 0.7,
+      max_tokens: 2048,
+    },
+  })
+  return res.choices?.[0]?.message?.content || ''
+}
+
+async function chatAnthropic(
+  url: string,
+  apiKey: string,
+  model: string,
+  messages: ChatMessage[],
+  temperature?: number
+): Promise<string> {
+  // Anthropic 将 system 独立成字段，且 messages 不接受 system 角色
+  const system = messages
+    .filter((m) => m.role === 'system')
+    .map((m) => m.content)
+    .join('\n\n')
+  const rest = messages
+    .filter((m) => m.role !== 'system')
+    .map((m) => ({ role: m.role, content: m.content }))
+
+  const res = await request<AnthropicResponse>({
+    url,
+    header: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    data: {
+      model,
+      max_tokens: 2048,
+      system: system || undefined,
+      messages: rest.length ? rest : [{ role: 'user', content: '你好' }],
+      temperature: temperature ?? 0.7,
+    },
+  })
+
+  return (res.content || [])
+    .filter((b) => b.type === 'text')
+    .map((b) => b.text || '')
+    .join('')
 }
 
 async function chat(
   messages: ChatMessage[],
   opts: { model?: string; temperature?: number } = {}
 ): Promise<string> {
-  const apiKey = getApiKey()
-  if (!apiKey) throw new Error('请先在设置中配置 DeepSeek API Key')
+  const cfg = getAIConfig()
+  const url = normalizeUrl(cfg.baseUrl)
+  if (!url) throw new Error('请先在「我的 → AI 设置」中配置接口地址')
+  if (!cfg.apiKey && !AI_PROVIDERS.find((x) => x.key === cfg.provider)?.optionalKey) {
+    throw new Error('请先在「我的 → AI 设置」中配置 API Key')
+  }
 
-  const res = await new Promise<DeepSeekResponse>((resolve, reject) => {
-    uni.request({
-      url: DEEPSEEK_URL,
-      method: 'POST',
-      header: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      data: {
-        model: opts.model || 'deepseek-v4-pro',
-        messages,
-        temperature: opts.temperature ?? 0.7,
-      },
-      success: (r) => {
-        if (r.statusCode === 200) resolve(r.data as DeepSeekResponse)
-        else reject(new Error(`API 错误 ${r.statusCode}: ${JSON.stringify(r.data)}`))
-      },
-      fail: (e) => reject(new Error(`网络错误: ${e.errMsg}`)),
-    })
-  })
+  const model = opts.model || cfg.model || AI_PROVIDERS[0].model
+  const protocol = detectProtocol(url)
 
-  return res.choices?.[0]?.message?.content || ''
+  return protocol === 'anthropic'
+    ? chatAnthropic(url, cfg.apiKey, model, messages, opts.temperature)
+    : chatOpenAI(url, cfg.apiKey, model, messages, opts.temperature)
+}
+
+/** 设置页用于验证配置是否可用 */
+export async function testAIConnection(
+  patch?: Partial<AIConfig>
+): Promise<{ ok: boolean; msg: string }> {
+  const cfg = patch ? { ...getAIConfig(), ...patch } : getAIConfig()
+  const url = normalizeUrl(cfg.baseUrl)
+  if (!url) return { ok: false, msg: '请先填写接口地址' }
+  if (!cfg.apiKey && !AI_PROVIDERS.find((x) => x.key === cfg.provider)?.optionalKey) {
+    return { ok: false, msg: '请先填写 API Key' }
+  }
+  if (!cfg.model) return { ok: false, msg: '请先填写模型名称' }
+
+  try {
+    const reply = await chat(
+      [{ role: 'user', content: '你好，请只回复两个字：正常' }],
+      { temperature: 0 }
+    )
+    const brief = (reply || '').trim().slice(0, 40)
+    return { ok: true, msg: brief ? `连接成功：${brief}` : '连接成功' }
+  } catch (e: any) {
+    return { ok: false, msg: e?.message || '连接失败' }
+  }
 }
 
 // ---------- Build financial context ----------

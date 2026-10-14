@@ -158,7 +158,7 @@ function goBack() { uni.navigateBack() }
 
 async function generateInsights() {
   if (!hasApiKey()) {
-    uni.showModal({ title: '未配置 API Key', content: '请先在设置中配置DeepSeek API Key', confirmText: '去设置', success(res) { if (res.confirm) uni.navigateTo({ url: '/pages/ai/settings' }) } })
+    uni.showModal({ title: '未配置 API Key', content: '请先在设置中配置 AI 服务（支持 OpenAI 兼容协议）', confirmText: '去设置', success(res) { if (res.confirm) uni.navigateTo({ url: '/pages/ai/settings' }) } })
     return
   }
   if (aiStore.isInsightsCacheValid()) {
@@ -180,7 +180,7 @@ async function generateInsights() {
 
 async function generatePrediction() {
   if (!hasApiKey()) {
-    uni.showModal({ title: '未配置 API Key', content: '请先在设置中配置DeepSeek API Key', confirmText: '去设置', success(res) { if (res.confirm) uni.navigateTo({ url: '/pages/ai/settings' }) } })
+    uni.showModal({ title: '未配置 API Key', content: '请先在设置中配置 AI 服务（支持 OpenAI 兼容协议）', confirmText: '去设置', success(res) { if (res.confirm) uni.navigateTo({ url: '/pages/ai/settings' }) } })
     return
   }
   if (aiStore.isBudgetPredictionValid()) {

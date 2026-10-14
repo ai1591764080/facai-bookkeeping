@@ -1,17 +1,48 @@
 <template>
   <view class="page">
     <view class="container">
-      <!-- API Key Settings -->
+      <!-- AI 服务配置 -->
       <view class="card">
-        <text class="section-title">🔑 API 配置</text>
-        <text class="desc">请输入 DeepSeek API Key，用于驱动 AI 分析功能。</text>
+        <text class="section-title">🤖 AI 服务配置</text>
+        <text class="desc">支持任意 OpenAI 兼容协议的服务：DeepSeek、OpenAI、通义千问、智谱、Kimi、豆包、硅基流动、Groq、本地 Ollama，也可直连 Claude 或填写自定义中转地址。</text>
+
+        <view class="setting-item">
+          <text class="setting-label">服务商</text>
+          <picker :range="providers" :range-key="'name'" :value="providerIndex" @change="onProviderChange">
+            <view class="picker-value">
+              <text>{{ providers[providerIndex].name }}</text>
+              <text class="picker-arrow">▸</text>
+            </view>
+          </picker>
+        </view>
+
+        <view class="input-group">
+          <text class="input-label">接口地址</text>
+          <input
+            v-model="baseUrl"
+            class="input-field"
+            type="text"
+            placeholder="https://xxx/v1/chat/completions"
+          />
+        </view>
+
+        <view class="input-group">
+          <text class="input-label">模型名称</text>
+          <input
+            v-model="model"
+            class="input-field"
+            type="text"
+            :placeholder="modelPlaceholder"
+          />
+        </view>
+
         <view class="input-group">
           <text class="input-label">API Key</text>
           <input
             v-model="apiKey"
             class="input-field"
             type="text"
-            placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+            :placeholder="keyPlaceholder"
             :password="!showKey"
           />
           <view class="input-actions">
@@ -20,7 +51,15 @@
             </view>
           </view>
         </view>
-        <view class="btn-primary save-btn" @tap="saveKey">保存</view>
+
+        <text class="setting-hint">接口地址可只填根地址（如 https://api.deepseek.com 或 .../v1），保存时会自动补全为完整接口地址</text>
+
+        <view class="btn-row">
+          <view class="btn-secondary" @tap="testConnection">
+            <text>{{ testing ? '测试中…' : '🧪 测试连接' }}</text>
+          </view>
+          <view class="btn-primary save-btn" @tap="saveConfig">保存</view>
+        </view>
       </view>
 
       <!-- How to get API Key -->
@@ -29,20 +68,23 @@
         <view class="steps">
           <view class="step">
             <text class="step-num">1</text>
-            <text class="step-text">访问 DeepSeek 开放平台：platform.deepseek.com</text>
+            <text class="step-text">打开所选服务商的开放平台（路径见下方提示）</text>
           </view>
           <view class="step">
             <text class="step-num">2</text>
-            <text class="step-text">注册/登录 DeepSeek 账号</text>
+            <text class="step-text">注册并登录账号，进入 API Key / 密钥管理页</text>
           </view>
           <view class="step">
             <text class="step-num">3</text>
-            <text class="step-text">进入"API Keys"页面，点击"创建 API Key"</text>
+            <text class="step-text">创建新密钥，复制后粘贴到上方 API Key 输入框</text>
           </view>
           <view class="step">
             <text class="step-num">4</text>
-            <text class="step-text">复制生成的 API Key 粘贴到上方输入框</text>
+            <text class="step-text">点「测试连接」验证，通过后再点「保存」</text>
           </view>
+        </view>
+        <view class="asr-help">
+          <text class="asr-help-text">当前服务商获取方式：{{ currentDoc }}</text>
         </view>
       </view>
 
@@ -95,32 +137,17 @@
         </view>
       </view>
 
-      <!-- Model Settings -->
-      <view class="card">
-        <text class="section-title">⚙️ 模型设置</text>
-        <view class="setting-item">
-          <text class="setting-label">分析模型</text>
-          <picker :range="models" :range-key="'label'" :value="modelIndex" @change="onModelChange">
-            <view class="picker-value">
-              <text>{{ models[modelIndex].label }}</text>
-              <text class="picker-arrow">▸</text>
-            </view>
-          </picker>
-        </view>
-        <text class="setting-hint">{{ models[modelIndex].desc }}</text>
-      </view>
-
       <!-- Status -->
       <view class="card" v-if="hasKey">
         <view class="status-row">
           <text class="status-dot active" />
-          <text class="status-text">DeepSeek API Key 已配置，AI 分析可用</text>
+          <text class="status-text">{{ currentProviderName }} 已配置（{{ currentModel || '未设置模型' }}），AI 分析可用</text>
         </view>
       </view>
       <view class="card" v-else>
         <view class="status-row">
           <text class="status-dot" />
-          <text class="status-text">未配置 DeepSeek API Key，AI 分析不可用</text>
+          <text class="status-text">未配置 API Key，AI 分析不可用</text>
         </view>
       </view>
 
@@ -143,14 +170,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue' // Vue 响应式与生命周期：ref 响应式，onMounted 组件挂载后触发
+import { ref, computed, onMounted } from 'vue' // Vue 响应式与生命周期：ref/computed 响应式，onMounted 组件挂载后触发
 import VoiceCommander from '../../components/VoiceCommander.vue' // 语音记账组件
-import { setApiKey, hasApiKey as checkHasApiKey } from '../../utils/ai' // 保存/读取 AI API Key
+import {
+  AI_PROVIDERS,
+  getAIConfig,
+  setAIConfig,
+  testAIConnection,
+  normalizeUrl,
+  hasApiKey as checkHasApiKey,
+} from '../../utils/ai' // AI 服务商预设、配置读写、地址补全与连接测试
 import { setXfyunConfig, hasXfyunConfig, getXfyunConfig } from '../../utils/voice' // 讯飞语音识别配置的写入/检查/读取
 
+// AI 服务配置
+const providers = AI_PROVIDERS
+const providerIndex = ref(0)
+const baseUrl = ref('')
+const model = ref('')
 const apiKey = ref('')
 const showKey = ref(false)
 const hasKey = ref(false)
+const testing = ref(false)
 
 // 讯飞语音配置
 const xfAppId = ref('')
@@ -160,37 +200,87 @@ const showXfKey = ref(false)
 const showXfSecret = ref(false)
 const hasXfyun = ref(false)
 
-const modelIndex = ref(0)
-
-const models = [
-  { label: 'DeepSeek-V4-Pro', value: 'deepseek-v4-pro', desc: '旗舰模型，分析更准确，适合深度财务分析' },
-  { label: 'DeepSeek-V4-Flash', value: 'deepseek-v4-flash', desc: '轻量快速模型，性价比高，适合日常记账分析' },
-]
+const currentProvider = computed(() => providers[providerIndex.value])
+const currentProviderName = computed(() => currentProvider.value.name)
+const currentDoc = computed(() => currentProvider.value.doc)
+const currentModel = computed(() => model.value.trim())
+const keyPlaceholder = computed(() => {
+  const p = currentProvider.value
+  return p.optionalKey ? '本地服务可留空' : `通常以 ${p.keyHint} 开头`
+})
+const modelPlaceholder = computed(() => currentProvider.value.model || '如 deepseek-chat')
 
 onMounted(() => {
+  const cfg = getAIConfig()
+  const idx = providers.findIndex((p) => p.key === cfg.provider)
+  providerIndex.value = idx >= 0 ? idx : 0
+  baseUrl.value = cfg.baseUrl
+  model.value = cfg.model
   hasKey.value = checkHasApiKey()
   hasXfyun.value = hasXfyunConfig()
-  const savedModel = uni.getStorageSync('beecount_ai_model')
-  if (savedModel) {
-    const idx = models.findIndex((m) => m.value === savedModel)
-    if (idx >= 0) modelIndex.value = idx
-  }
 })
 
-function saveKey() {
+function onProviderChange(e: any) {
+  const idx = Number(e.detail.value)
+  providerIndex.value = idx
+  const p = providers[idx]
+  baseUrl.value = p.baseUrl
+  if (p.model) model.value = p.model
+}
+
+/** 收集并校验当前表单，返回归一化后的配置（校验失败返回 null） */
+function collectConfig(): { provider: string; baseUrl: string; model: string; apiKey: string } | null {
+  const url = baseUrl.value.trim()
   const key = apiKey.value.trim()
-  if (!key) {
-    uni.showToast({ title: '请输入 API Key', icon: 'none' })
-    return
+  const mdl = model.value.trim()
+
+  if (!url) {
+    uni.showToast({ title: '请填写接口地址', icon: 'none' })
+    return null
   }
-  if (!key.startsWith('sk-')) {
-    uni.showToast({ title: 'API Key 格式不正确，应以 sk- 开头', icon: 'none' })
-    return
+  if (!mdl) {
+    uni.showToast({ title: '请填写模型名称', icon: 'none' })
+    return null
   }
-  setApiKey(key)
-  hasKey.value = true
+  // 本地服务（如 Ollama）允许无 Key，其余必须填写
+  if (!key && !currentProvider.value.optionalKey) {
+    uni.showToast({ title: '请填写 API Key', icon: 'none' })
+    return null
+  }
+
+  return {
+    provider: currentProvider.value.key,
+    baseUrl: normalizeUrl(url),
+    model: mdl,
+    apiKey: key,
+  }
+}
+
+function saveConfig() {
+  const cfg = collectConfig()
+  if (!cfg) return
+
+  setAIConfig(cfg)
+  baseUrl.value = cfg.baseUrl
+  hasKey.value = checkHasApiKey()
   uni.showToast({ title: '保存成功', icon: 'success' })
-  apiKey.value = ''
+}
+
+async function testConnection() {
+  const cfg = collectConfig()
+  if (!cfg) return
+
+  testing.value = true
+  try {
+    const r = await testAIConnection(cfg)
+    uni.showToast({
+      title: r.msg.slice(0, 60),
+      icon: r.ok ? 'success' : 'none',
+      duration: 3000,
+    })
+  } finally {
+    testing.value = false
+  }
 }
 
 function saveXfyunConfig() {
@@ -211,12 +301,7 @@ function saveXfyunConfig() {
   xfApiSecret.value = ''
 }
 
-function onModelChange(e: any) {
-  const idx = Number(e.detail.value)
-  modelIndex.value = idx
-  uni.setStorageSync('beecount_ai_model', models[idx].value)
-  uni.showToast({ title: '已切换模型', icon: 'success' })
-}
+
 </script>
 
 <style scoped>
@@ -276,6 +361,28 @@ function onModelChange(e: any) {
   align-items: center;
   justify-content: center;
   font-size: 30rpx;
+}
+
+.btn-row {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 8rpx;
+}
+
+.btn-row .save-btn {
+  flex: 1;
+}
+
+.btn-secondary {
+  flex: 1;
+  height: 84rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30rpx;
+  border-radius: 16rpx;
+  background: var(--primary-light);
+  color: var(--primary);
 }
 
 .asr-help {

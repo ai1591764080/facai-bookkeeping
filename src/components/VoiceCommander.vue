@@ -201,7 +201,7 @@ function startListening() {
     return
   }
   if (!hasApiKey()) {
-    showResult(false, '请先在「AI 设置」中配置 DeepSeek API Key')
+    showResult(false, '请先在「AI 设置」中配置 AI 服务的 API Key')
     return
   }
 

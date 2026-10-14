@@ -295,7 +295,7 @@ function startListening() {
   if (!hasApiKey()) {
     uni.showModal({
       title: '缺少 AI 配置',
-      content: '语音指令需要 DeepSeek API Key 来解析，是否现在去「AI 设置」配置？',
+      content: '语音指令需要 AI 服务（任意 OpenAI 兼容接口均可）来解析，是否现在去「AI 设置」配置？',
       confirmText: '去配置',
       cancelText: '取消',
       success: (r) => { if (r.confirm) uni.navigateTo({ url: '/pages/ai/settings' }) },

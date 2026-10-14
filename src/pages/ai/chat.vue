@@ -142,7 +142,7 @@ async function sendMessage() {
   if (!hasApiKey()) {
     uni.showModal({
       title: '未配置 API Key',
-      content: '使用 AI 功能需要先配置DeepSeek API Key，是否去设置？',
+      content: '使用 AI 功能需要先配置 AI 服务（支持 OpenAI 兼容协议），是否去设置？',
       confirmText: '去设置',
       success(res) {
         if (res.confirm) uni.navigateTo({ url: '/pages/ai/settings' })

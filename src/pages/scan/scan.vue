@@ -21,7 +21,7 @@ const showConfig = ref(false)
 const configToken = ref('')
 const configUrl = ref('')
 
-// AI 思考画面（DeepSeek 整理阶段的状态反馈）
+// AI 思考画面（大模型整理阶段的状态反馈）
 const aiThinking = ref(false)
 const thinkingStep = ref(0)
 let thinkingTimer: any = null
@@ -70,7 +70,7 @@ async function recognize() {
   try {
     const base64 = await readFileAsBase64(imagePath.value)
     uni.showLoading({ title: 'OCR 识别中...' })
-    // 飞桨 OCR 识别（使用飞桨 AI Studio token，与 DeepSeek 无关）
+    // 飞桨 OCR 识别（使用飞桨 AI Studio token，与大模型 API Key 无关）
     const text = await recognizeImage(base64)
     uni.hideLoading()
     if (!text.trim()) {
@@ -82,11 +82,11 @@ async function recognize() {
     step.value = 'review'
     uni.showToast({ title: '识别完成', icon: 'none' })
 
-    // AI 智能整理（这一步才需要 DeepSeek）
+    // AI 智能整理（这一步才需要大模型的 API Key）
     if (!hasApiKey()) {
       uni.showModal({
         title: '已识别完成',
-        content: '图片文字已识别成功。智能整理记账需要 DeepSeek API Key，是否前往配置？',
+        content: '图片文字已识别成功。智能整理记账需要配置 AI 服务（支持 OpenAI 兼容协议），是否前往配置？',
         confirmText: '去配置',
         cancelText: '暂不',
         success: (r) => {
@@ -96,7 +96,7 @@ async function recognize() {
       return
     }
 
-    // 显示 AI 思考画面（DeepSeek 整理需要数秒，给用户明确反馈）
+    // 显示 AI 思考画面（大模型整理需要数秒，给用户明确反馈）
     aiThinking.value = true
     thinkingStep.value = 0
     thinkingTimer = setInterval(() => {
@@ -351,7 +351,7 @@ function onAccChange(index: number, e: any) {
       </view>
     </view>
 
-    <!-- AI 思考画面（DeepSeek 整理阶段） -->
+    <!-- AI 思考画面（大模型整理阶段） -->
     <view class="thinking-mask" v-if="aiThinking">
       <view class="thinking-card">
         <view class="thinking-icon">

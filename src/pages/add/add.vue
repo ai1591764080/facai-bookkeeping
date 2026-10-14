@@ -390,7 +390,7 @@ async function onAiParse() {
   if (!hasApiKey()) {
     uni.showModal({
       title: '未配置 API Key',
-      content: 'AI 快捷记账需要配置DeepSeek API Key，可在"我的 > AI 设置"中配置',
+      content: 'AI 快捷记账需要先配置 AI 服务（支持 OpenAI 兼容协议），可在"我的 > AI 设置"中配置',
       confirmText: '去设置',
       success(res) {
         if (res.confirm) uni.navigateTo({ url: '/pages/ai/settings' })
