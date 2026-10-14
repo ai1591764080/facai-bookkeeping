@@ -1,12 +1,31 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue' // Vue 响应式：ref 声明响应式数据，computed 派生计算值
-import { useTransactionStore, useCategoryStore, useAccountStore, useLedgerStore } from '../../stores' // 交易/分类/账户/账本状态仓库
+import { ref, computed, onMounted } from 'vue' // Vue 响应式与生命周期：ref/computed 响应式，onMounted 组件挂载后触发
+import {
+  useTransactionStore,
+  useCategoryStore,
+  useAccountStore,
+  useLedgerStore,
+  useBudgetStore,
+  useScanStore,
+} from '../../stores' // 交易/分类/账户/账本/预算/扫描状态仓库
 import type { Transaction } from '../../types' // 交易记录的类型定义
+import {
+  collectBackup,
+  validateBackup,
+  applyBackup,
+  backupSummary,
+  backupFileName,
+  saveTextFile,
+  pickTextFile,
+  type BackupFile,
+} from '../../utils/backup' // 备份与恢复：全量导出、格式校验、写入恢复及跨平台文件存取
 
 const transactionStore = useTransactionStore()
 const categoryStore = useCategoryStore()
 const accountStore = useAccountStore()
 const ledgerStore = useLedgerStore()
+const budgetStore = useBudgetStore()
+const scanStore = useScanStore()
 
 // Date range
 const now = new Date()
@@ -179,13 +198,167 @@ const showPreview = ref(false)
 function togglePreview() {
   showPreview.value = !showPreview.value
 }
+
+// ---------- 备份与恢复 ----------
+// 数据全部存在设备本地，清理缓存或换设备会丢失，因此提供完整备份与恢复能力
+const importMode = ref<'replace' | 'merge'>('replace')
+const stats = ref<{ key: string; label: string; count: number }[]>([])
+const pending = ref<BackupFile | null>(null)
+
+function refreshStats() {
+  stats.value = backupSummary(collectBackup().data)
+}
+
+/** 导出全量备份文件（不受上方日期范围影响） */
+async function onBackup() {
+  try {
+    const file = collectBackup()
+    const total = backupSummary(file.data).reduce((a, b) => a + b.count, 0)
+    if (total === 0) {
+      uni.showToast({ title: '当前没有可备份的数据', icon: 'none' })
+      return
+    }
+    await saveTextFile(JSON.stringify(file, null, 2), backupFileName())
+    uni.showToast({ title: `已备份 ${total} 条数据`, icon: 'success', duration: 2500 })
+  } catch (e: any) {
+    uni.showToast({ title: e?.message || '备份失败', icon: 'none', duration: 2500 })
+  }
+}
+
+/** 选择备份文件并解析校验 */
+async function onPickFile() {
+  let text = ''
+  try {
+    text = await pickTextFile()
+  } catch (e: any) {
+    const msg = e?.message || ''
+    // 用户主动取消时不提示错误
+    if (msg === '未选择文件' || msg === '已取消') return
+    uni.showToast({ title: msg || '读取文件失败', icon: 'none', duration: 2500 })
+    return
+  }
+
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch (e) {
+    uni.showToast({ title: '文件不是有效的 JSON 格式', icon: 'none', duration: 2500 })
+    return
+  }
+
+  const result = validateBackup(raw)
+  if (!result.ok) {
+    uni.showToast({ title: result.msg, icon: 'none', duration: 3000 })
+    return
+  }
+
+  pending.value = result.file
+  const list = backupSummary(result.file.data).filter((x) => x.count > 0)
+  const detail = list.length ? list.map((x) => `${x.label} ${x.count}`).join('、') : '无数据'
+  const modeText = importMode.value === 'replace' ? '覆盖' : '合并'
+
+  const warn =
+    importMode.value === 'replace' ? '\n\n⚠️ 覆盖导入会清空当前所有数据，且无法撤销' : ''
+
+  uni.showModal({
+    title: `确认${modeText}导入？`,
+    content: `备份内容：${detail}\n\n导入方式：${modeText}导入${warn}`,
+    confirmText: '确认导入',
+    cancelText: '取消',
+    success: (r) => {
+      if (r.confirm) doImport()
+    },
+  })
+}
+
+/** 执行导入并刷新全部内存数据 */
+function doImport() {
+  const file = pending.value
+  if (!file) return
+
+  try {
+    const r = applyBackup(file, importMode.value)
+    // 写入存储后同步刷新各 store，保证页面立即展示新数据
+    transactionStore.reload()
+    categoryStore.reload()
+    accountStore.reload()
+    ledgerStore.reload()
+    budgetStore.reload()
+    scanStore.reload()
+
+    pending.value = null
+    refreshStats()
+    uni.showModal({
+      title: '导入成功',
+      content: `已导入 ${r.total} 条数据，页面数据已刷新`,
+      showCancel: false,
+    })
+  } catch (e) {
+    uni.showModal({
+      title: '导入失败',
+      content: '写入本地存储时出错，请重试或检查存储空间',
+      showCancel: false,
+    })
+  }
+}
+
+onMounted(() => {
+  refreshStats()
+})
 </script>
 
 <template>
   <view class="export-page">
+    <!-- 数据备份与恢复 -->
+    <view class="section">
+      <text class="section-label">💾 数据备份与恢复</text>
+      <text class="backup-tip">数据仅保存在本机，清理缓存或更换设备会丢失。建议定期导出备份文件自行保存。</text>
+
+      <view class="card stat-card">
+        <view class="stat-grid">
+          <view class="stat-item" v-for="s in stats" :key="s.key">
+            <text class="stat-num">{{ s.count }}</text>
+            <text class="stat-label">{{ s.label }}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="backup-actions">
+        <view class="backup-btn primary" @tap="onBackup">
+          <text class="backup-btn-text">📤 导出备份</text>
+        </view>
+        <view class="backup-btn" @tap="onPickFile">
+          <text class="backup-btn-text">📥 导入恢复</text>
+        </view>
+      </view>
+
+      <view class="mode-row">
+        <text class="mode-label">导入方式</text>
+        <view class="mode-options">
+          <view
+            class="mode-option"
+            :class="{ active: importMode === 'replace' }"
+            @tap="importMode = 'replace'"
+          >
+            <text class="mode-text">覆盖导入</text>
+          </view>
+          <view
+            class="mode-option"
+            :class="{ active: importMode === 'merge' }"
+            @tap="importMode = 'merge'"
+          >
+            <text class="mode-text">合并导入</text>
+          </view>
+        </view>
+      </view>
+      <text class="mode-hint">
+        {{ importMode === 'replace' ? '覆盖：清空现有数据，完全替换为备份内容' : '合并：保留现有数据，备份中相同 ID 的记录覆盖本地' }}
+      </text>
+    </view>
+
     <!-- Export type -->
     <view class="section">
-      <text class="section-label">导出格式</text>
+      <text class="section-label">导出为文件</text>
       <view class="type-row">
         <view
           class="type-option"
@@ -297,6 +470,129 @@ function togglePreview() {
   color: var(--text-primary);
   margin-bottom: 16rpx;
   display: block;
+}
+
+.backup-tip {
+  font-size: 22rpx;
+  color: var(--text-tertiary);
+  line-height: 1.7;
+  margin-bottom: 16rpx;
+  display: block;
+}
+
+.stat-card {
+  padding: 20rpx 16rpx;
+}
+
+.stat-grid {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.stat-item {
+  width: 25%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12rpx 0;
+}
+
+.stat-num {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.stat-label {
+  font-size: 22rpx;
+  color: var(--text-secondary);
+  margin-top: 4rpx;
+}
+
+.backup-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 16rpx;
+  margin-top: 16rpx;
+}
+
+.backup-btn {
+  flex: 1;
+  padding: 24rpx 0;
+  border-radius: var(--radius);
+  background: var(--card);
+  border: 2rpx solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.backup-btn.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.backup-btn.primary .backup-btn-text {
+  color: #fff;
+}
+
+.backup-btn-text {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mode-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-top: 24rpx;
+}
+
+.mode-label {
+  font-size: 26rpx;
+  color: var(--text-secondary);
+  margin-right: 16rpx;
+}
+
+.mode-options {
+  display: flex;
+  flex-direction: row;
+  gap: 12rpx;
+  flex: 1;
+}
+
+.mode-option {
+  flex: 1;
+  padding: 14rpx 0;
+  text-align: center;
+  border-radius: 12rpx;
+  background: var(--card);
+  border: 2rpx solid var(--border);
+}
+
+.mode-option.active {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+.mode-text {
+  font-size: 24rpx;
+  color: var(--text-secondary);
+}
+
+.mode-option.active .mode-text {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.mode-hint {
+  font-size: 22rpx;
+  color: var(--text-tertiary);
+  margin-top: 12rpx;
+  display: block;
+  line-height: 1.6;
 }
 
 .type-row {

@@ -29,5 +29,10 @@ export const useBudgetStore = defineStore('budget', () => {
     saveBudgets(budgets.value)
   }
 
-  return { budgets, getByLedger, add, update, remove }
+  /** 从本地存储重新加载（导入备份后用于刷新内存数据） */
+  function reload() {
+    budgets.value = getBudgets()
+  }
+
+  return { budgets, getByLedger, add, update, remove, reload }
 })

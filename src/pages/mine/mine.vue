@@ -50,7 +50,7 @@ const menuItems: MenuItem[] = [
   { icon: '📂', label: '分类管理', action: 'navigate', path: '/pages/category/manage' },
   { icon: '💰', label: '预算管理', action: 'navigate', path: '/pages/budget/budget' },
   { icon: '👥', label: 'AA记账', action: 'navigate', path: '/pages/aa/aa' },
-  { icon: '📤', label: '数据导出', action: 'navigate', path: '/pages/export/export' },
+  { icon: '💾', label: '备份与导出', action: 'navigate', path: '/pages/export/export' },
   { icon: '🎨', label: '主题切换', action: 'theme' },
   { icon: '📅', label: '月初日期', action: 'picker', pickerType: 'monthStart' },
   { icon: '💱', label: '货币设置', action: 'picker', pickerType: 'currency' },

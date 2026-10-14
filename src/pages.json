@@ -12,7 +12,7 @@
     { "path": "pages/ledger/manage", "style": { "navigationBarTitleText": "账本管理" } },
     { "path": "pages/budget/budget", "style": { "navigationBarTitleText": "预算管理" } },
     { "path": "pages/aa/aa", "style": { "navigationBarTitleText": "AA记账" } },
-    { "path": "pages/export/export", "style": { "navigationBarTitleText": "数据导出" } },
+    { "path": "pages/export/export", "style": { "navigationBarTitleText": "备份与导出" } },
     { "path": "pages/ai/chat", "style": { "navigationBarTitleText": "AI 助手", "navigationStyle": "custom" } },
     { "path": "pages/ai/insights", "style": { "navigationBarTitleText": "AI 洞察", "navigationStyle": "custom" } },
     { "path": "pages/ai/settings", "style": { "navigationBarTitleText": "AI 设置" } },

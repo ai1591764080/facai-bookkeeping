@@ -47,5 +47,11 @@ export const useLedgerStore = defineStore('ledger', () => {
     }
   }
 
-  return { ledgers, currentId, current, switchLedger, add, update, remove }
+  /** 从本地存储重新加载（导入备份后用于刷新内存数据与当前账本） */
+  function reload() {
+    ledgers.value = loadLedgers()
+    currentId.value = getCurrentLedgerId() || (ledgers.value[0]?.id ?? '')
+  }
+
+  return { ledgers, currentId, current, switchLedger, add, update, remove, reload }
 })

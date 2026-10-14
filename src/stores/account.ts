@@ -55,5 +55,10 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
 
-  return { accounts, visibleAccounts, totalAssets, totalLiabilities, netWorth, getById, add, update, remove, adjustBalance }
+  /** 从本地存储重新加载（导入备份后用于刷新内存数据） */
+  function reload() {
+    accounts.value = loadAccounts()
+  }
+
+  return { accounts, visibleAccounts, totalAssets, totalLiabilities, netWorth, getById, add, update, remove, adjustBalance, reload }
 })

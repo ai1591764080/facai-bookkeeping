@@ -50,6 +50,11 @@ export const useCategoryStore = defineStore('category', () => {
     saveCategories(categories.value)
   }
 
+  /** 从本地存储重新加载（导入备份后用于刷新内存数据） */
+  function reload() {
+    categories.value = loadCategories()
+  }
+
   return {
     categories,
     expenseCategories,
@@ -59,5 +64,6 @@ export const useCategoryStore = defineStore('category', () => {
     addCategory,
     updateCategory,
     removeCategory,
+    reload,
   }
 })
