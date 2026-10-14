@@ -49,9 +49,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue' // Vue 组合式 API：ref/computed 响应式，onMounted/onBeforeUnmount 生命周期
 import { startVoice, stopVoice } from '../utils/voice' // 跨平台语音识别（讯飞/微信插件）
-import { parseVoiceCommand, hasApiKey } from '../utils/ai' // AI 解析语音文本为记账动作，检查是否已配置 API Key
+import { parseVoiceCommands, hasApiKey } from '../utils/ai' // AI 解析语音文本为记账动作（支持一次多笔），检查是否已配置 API Key
 import { hasXfyunConfig } from '../utils/voice' // 检查是否已配置讯飞语音识别
-import { executeCommand } from '../utils/command' // 执行解析出的记账命令并返回结果
+import { executeCommands } from '../utils/command' // 批量执行解析出的记账命令并返回汇总结果
 import {
   useCategoryStore,
   useAccountStore,
@@ -239,7 +239,8 @@ async function processCommand(text: string) {
   console.log('[VC] Processing voice command:', text)
 
   try {
-    const action = await parseVoiceCommand(text, {
+    // 一次解析可能返回多笔（如"午饭30，打车15"）
+    const actions = await parseVoiceCommands(text, {
       categories: catStore.categories,
       accounts: accStore.accounts,
       ledgers: ledgerStore.ledgers.map(l => ({ id: l.id, name: l.name })),
@@ -252,19 +253,24 @@ async function processCommand(text: string) {
         }),
     })
 
-    console.log('[VC] AI parsed action:', JSON.stringify(action))
+    console.log('[VC] AI parsed actions:', JSON.stringify(actions))
 
-    if (action.action === 'unknown') {
-      showResult(false, action.confirmation || '抱歉，没有理解您的指令')
+    const usable = actions.filter(a => a.action !== 'unknown')
+    if (usable.length === 0) {
+      showResult(false, actions[0]?.confirmation || '抱歉，没有理解您的指令')
       return
     }
 
-    resultMessage.value = action.confirmation
+    resultMessage.value =
+      usable.length > 1
+        ? `识别到 ${usable.length} 笔，正在记录…`
+        : usable[0].confirmation || '正在记录…'
     resultSuccess.value = true
 
     await new Promise(r => setTimeout(r, 500))
-    const result = executeCommand(action)
+    const result = executeCommands(usable)
     console.log('[VC] Execute result:', result)
+    if (result.navigateTo) uni.navigateTo({ url: result.navigateTo })
     showResult(result.success, result.message)
   } catch (e: any) {
     console.error('[VC] Error:', e)

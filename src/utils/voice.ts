@@ -1,9 +1,13 @@
 /**
- * 跨平台语音识别工具（讯飞语音听写方案）
+ * 跨平台语音识别工具（多引擎可切换）
  *
- * 策略：
- * - H5 浏览器: 讯飞语音听写 WebSocket 流式 API（实时返回、国内可用）
- * - 微信小程序: 微信同声传译插件
+ * 支持三种识别引擎，用户在「我的 → AI 设置」自行选择：
+ * 1. Web Speech API — 浏览器原生识别，免配置、免费，Chrome/Edge/Safari 可用（仅 H5）
+ * 2. 自定义接口 — 录音后上传到任意语音转写接口（OpenAI /audio/transcriptions 兼容格式）
+ * 3. 讯飞语音听写 — 流式 WebSocket，实时上屏（仅 H5）
+ * 4. 微信同声传译插件 — 微信小程序端自动使用
+ *
+ * 未配置任何接口时默认使用 Web Speech API，保证开箱可用。
  *
  * 讯飞语音听写（流式版）WebSocket API:
  *   URL: wss://iat-api.xfyun.cn/v2/iat
@@ -19,6 +23,97 @@ export interface VoiceResult {
 
 export type VoiceCallback = (result: VoiceResult) => void
 export type ErrorCallback = (error: string) => void
+
+// ---------- 识别引擎配置 ----------
+
+export type ASREngine = 'webspeech' | 'api' | 'xfyun'
+
+export interface ASRConfig {
+  engine: ASREngine // 用户选择的识别引擎
+  apiUrl: string // 自定义语音转写接口地址
+  apiKey: string // 自定义接口鉴权 Key
+  model: string // 模型名，如 whisper-1
+}
+
+export const ASR_OPTIONS: { key: ASREngine; name: string; desc: string; hint: string }[] = [
+  {
+    key: 'webspeech',
+    name: '浏览器原生识别（Web Speech API）',
+    desc: '免配置、免费，识别在浏览器本地完成，需联网且仅 Chrome/Edge/Safari 支持',
+    hint: '无需填写任何配置',
+  },
+  {
+    key: 'api',
+    name: '自定义语音接口',
+    desc: '录音后上传到你配置的任意语音转写接口，支持 OpenAI 音频转写兼容格式',
+    hint: '需填写接口地址、API Key 与模型名',
+  },
+  {
+    key: 'xfyun',
+    name: '讯飞语音听写',
+    desc: '流式识别，实时上屏，国内速度快，需讯飞 AppID/APIKey/APISecret',
+    hint: '需填写讯飞三项凭证',
+  },
+]
+
+const ASR_CONFIG_KEY = 'beecount_asr_config'
+const DEFAULT_ASR_URL = 'https://api.openai.com/v1/audio/transcriptions'
+
+function defaultASRConfig(): ASRConfig {
+  return { engine: 'webspeech', apiUrl: DEFAULT_ASR_URL, apiKey: '', model: 'whisper-1' }
+}
+
+/** 读取识别引擎配置 */
+export function getASRConfig(): ASRConfig {
+  const raw = uni.getStorageSync(ASR_CONFIG_KEY)
+  if (raw) {
+    try {
+      const cfg = typeof raw === 'string' ? JSON.parse(raw) : raw
+      if (cfg && typeof cfg === 'object') return { ...defaultASRConfig(), ...cfg }
+    } catch (e) {
+      // 存储损坏时回退默认
+    }
+  }
+  // 向后兼容：旧版只配过讯飞，则视为讯飞引擎
+  if (hasXfyunConfig()) return { ...defaultASRConfig(), engine: 'xfyun' }
+  return defaultASRConfig()
+}
+
+/** 写入识别引擎配置（局部更新） */
+export function setASRConfig(patch: Partial<ASRConfig>): ASRConfig {
+  const next = { ...getASRConfig(), ...patch }
+  uni.setStorageSync(ASR_CONFIG_KEY, JSON.stringify(next))
+  return next
+}
+
+/** 补全转写接口地址：只填根地址或 /v1 时自动补齐 */
+export function normalizeASRUrl(raw: string): string {
+  let u = (raw || '').trim().replace(/\/+$/, '')
+  if (!u) return ''
+  if (/\/audio\/transcriptions$/i.test(u)) return u
+  if (/\/v\d+$/i.test(u)) return `${u}/audio/transcriptions`
+  return `${u}/v1/audio/transcriptions`
+}
+
+/** 测试自定义转写接口连通性（用一段静音音频探测，主要验证鉴权与地址） */
+export async function testASRConnection(
+  patch?: Partial<ASRConfig>
+): Promise<{ ok: boolean; msg: string }> {
+  const cfg = patch ? { ...getASRConfig(), ...patch } : getASRConfig()
+  const url = normalizeASRUrl(cfg.apiUrl)
+  if (!url) return { ok: false, msg: '请先填写语音接口地址' }
+  if (!cfg.apiKey) return { ok: false, msg: '请先填写语音接口 API Key' }
+  try {
+    await transcribe(url, cfg.apiKey, cfg.model || 'whisper-1', buildSilenceWav())
+    return { ok: true, msg: '接口连通，配置可用' }
+  } catch (e: any) {
+    const msg = e?.message || '连接失败'
+    // 静音音频常被判为无内容，只要不是鉴权/地址类错误就视为连通
+    if (/401|403|404|invalid api key|unauthor/i.test(msg)) return { ok: false, msg }
+    if (/400|500|502|503/i.test(msg)) return { ok: true, msg: '接口可达（静音探测被拒属正常），配置可用' }
+    return { ok: false, msg }
+  }
+}
 
 // ---------- 讯飞 API 凭证管理 ----------
 
@@ -355,48 +450,332 @@ function stopWx() {
   isListening = false
 }
 
+// ---------- Web Speech API（浏览器原生识别，免配置） ----------
+
+interface SpeechRecognitionLike {
+  lang: string
+  continuous: boolean
+  interimResults: boolean
+  maxAlternatives: number
+  start(): void
+  stop(): void
+  abort(): void
+  onresult: ((ev: any) => void) | null
+  onerror: ((ev: any) => void) | null
+  onend: (() => void) | null
+}
+
+function getSpeechRecognitionCtor(): (new () => SpeechRecognitionLike) | null {
+  // #ifdef H5
+  if (typeof window === 'undefined') return null
+  const w = window as any
+  return w.SpeechRecognition || w.webkitSpeechRecognition || null
+  // #endif
+  // #ifndef H5
+  return null
+  // #endif
+}
+
+/** 当前环境是否支持浏览器原生语音识别 */
+export function isWebSpeechSupported(): boolean {
+  return !!getSpeechRecognitionCtor()
+}
+
+let recognition: SpeechRecognitionLike | null = null
+
+function startWebSpeech(onResult: VoiceCallback, onError: ErrorCallback): boolean {
+  const Ctor = getSpeechRecognitionCtor()
+  if (!Ctor) {
+    onError('当前浏览器不支持 Web Speech API，请改用自定义语音接口，或在 Chrome / Edge / Safari 中使用')
+    return false
+  }
+
+  try {
+    const rec = new Ctor()
+    recognition = rec
+    rec.lang = 'zh-CN'
+    rec.continuous = true
+    rec.interimResults = true
+    rec.maxAlternatives = 1
+
+    rec.onresult = (ev: any) => {
+      let interim = ''
+      let finalText = ''
+      for (let i = ev.resultIndex || 0; i < ev.results.length; i++) {
+        const r = ev.results[i]
+        const t = (r[0] && r[0].transcript) || ''
+        if (r.isFinal) finalText += t
+        else interim += t
+      }
+      if (finalText) onResult({ text: finalText, isFinal: true })
+      else if (interim) onResult({ text: interim, isFinal: false })
+    }
+
+    rec.onerror = (ev: any) => {
+      const key = String(ev?.error || '')
+      if (key === 'aborted') return
+      const msgs: Record<string, string> = {
+        'not-allowed': '麦克风权限被拒绝，请在浏览器中允许使用麦克风',
+        'service-not-allowed': '浏览器语音服务不可用，可改用自定义语音接口',
+        'no-speech': '未检测到说话，请再试一次',
+        network: '网络异常，浏览器原生识别需要联网',
+        'audio-capture': '未找到麦克风设备',
+      }
+      onError(msgs[key] || `语音识别失败：${key || '未知错误'}`)
+    }
+
+    rec.onend = () => {
+      isListening = false
+    }
+
+    rec.start()
+    isListening = true
+    return true
+  } catch (e: any) {
+    onError(`启动语音识别失败：${e?.message || '未知错误'}`)
+    return false
+  }
+}
+
+function stopWebSpeech() {
+  isListening = false
+  if (recognition) {
+    try { recognition.stop() } catch (e) { /* 忽略未启动时的异常 */ }
+    recognition = null
+  }
+}
+
+// ---------- 自定义语音接口（录音后上传转写） ----------
+
+let mediaRecorder: MediaRecorder | null = null
+let recordedChunks: Blob[] = []
+let apiMicStream: MediaStream | null = null
+
+function pickMimeType(): string {
+  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus']
+  for (const t of candidates) {
+    try {
+      if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) return t
+    } catch (e) { /* 继续尝试下一个候选 */ }
+  }
+  return ''
+}
+
+/** 生成一段极短静音 WAV，用于探测转写接口连通性 */
+function buildSilenceWav(): Blob {
+  const sampleRate = 8000
+  const numSamples = Math.floor(sampleRate * 0.2)
+  const buffer = new ArrayBuffer(44 + numSamples * 2)
+  const view = new DataView(buffer)
+  const writeStr = (offset: number, s: string) => {
+    for (let i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i))
+  }
+  writeStr(0, 'RIFF')
+  view.setUint32(4, 36 + numSamples * 2, true)
+  writeStr(8, 'WAVE')
+  writeStr(12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true) // PCM
+  view.setUint16(22, 1, true) // 单声道
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * 2, true)
+  view.setUint16(32, 2, true)
+  view.setUint16(34, 16, true)
+  writeStr(36, 'data')
+  view.setUint32(40, numSamples * 2, true)
+  return new Blob([buffer], { type: 'audio/wav' })
+}
+
+/** 调用语音转写接口，兼容 {text} / {data.text} / {result} 等多种返回格式 */
+async function transcribe(url: string, apiKey: string, model: string, audio: Blob): Promise<string> {
+  const form = new FormData()
+  const mt = (audio.type || '').toLowerCase()
+  const ext = mt.includes('webm') ? 'webm' : mt.includes('mp4') ? 'm4a' : mt.includes('ogg') ? 'ogg' : 'wav'
+  form.append('file', audio, `voice.${ext}`)
+  if (model) form.append('model', model)
+  form.append('language', 'zh')
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form,
+  })
+
+  if (!res.ok) {
+    let detail = ''
+    try { detail = (await res.text()).slice(0, 150) } catch (e) { /* 忽略读取失败 */ }
+    throw new Error(`接口返回 ${res.status}：${detail || res.statusText}`)
+  }
+
+  const data: any = await res.json().catch(() => null)
+  const text = data?.text ?? data?.data?.text ?? data?.result ?? data?.transcription ?? ''
+  return String(text || '').trim()
+}
+
+function cleanupApiStream() {
+  if (apiMicStream) {
+    try { apiMicStream.getTracks().forEach((t) => t.stop()) } catch (e) { /* 忽略 */ }
+    apiMicStream = null
+  }
+}
+
+async function startApiASR(onResult: VoiceCallback, onError: ErrorCallback): Promise<boolean> {
+  const cfg = getASRConfig()
+  const url = normalizeASRUrl(cfg.apiUrl)
+  if (!url) { onError('请先在设置中配置语音识别接口地址'); return false }
+  if (!cfg.apiKey) { onError('请先在设置中配置语音识别接口的 API Key'); return false }
+
+  if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+    onError('当前环境不支持录音，请改用浏览器原生识别（Web Speech API）')
+    return false
+  }
+
+  try {
+    apiMicStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true },
+    })
+  } catch (e: any) {
+    onError(`无法访问麦克风：${e?.message || '权限被拒绝'}`)
+    return false
+  }
+
+  try {
+    const mimeType = pickMimeType()
+    mediaRecorder = new MediaRecorder(apiMicStream, mimeType ? { mimeType } : undefined)
+    recordedChunks = []
+
+    mediaRecorder.ondataavailable = (ev: any) => {
+      if (ev.data && ev.data.size > 0) recordedChunks.push(ev.data)
+    }
+
+    mediaRecorder.onstop = async () => {
+      const type = mediaRecorder?.mimeType || mimeType || 'audio/webm'
+      const blob = new Blob(recordedChunks, { type })
+      recordedChunks = []
+      cleanupApiStream()
+
+      if (blob.size === 0) { onError('未采集到音频，请重试'); return }
+      onResult({ text: '识别中…', isFinal: false })
+      try {
+        const text = await transcribe(url, cfg.apiKey, cfg.model || 'whisper-1', blob)
+        if (!text) onError('识别结果为空，请再说一次')
+        else onResult({ text, isFinal: true })
+      } catch (e: any) {
+        onError(e?.message || '识别失败')
+      }
+    }
+
+    mediaRecorder.start()
+    isListening = true
+    return true
+  } catch (e: any) {
+    onError(`录音启动失败：${e?.message || '未知错误'}`)
+    cleanupApiStream()
+    return false
+  }
+}
+
+function stopApiASR() {
+  isListening = false
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    try { mediaRecorder.stop() } catch (e) { /* 忽略 */ }
+  } else {
+    cleanupApiStream()
+  }
+}
+
 // ---------- 统一 API ----------
 
-export type VoiceMode = 'xfyun' | 'wechat' | 'none'
+export type VoiceMode = 'xfyun' | 'wechat' | 'webspeech' | 'api' | 'none'
 
+/** 当前实际会使用的识别引擎：优先用户所选，所选不可用时自动回退 */
 export function getVoiceMode(): VoiceMode {
   // #ifdef MP-WEIXIN
+  // 小程序端不使用 Web Speech API，统一走微信同声传译插件
   return initWxPlugin()?.getRecordRecognitionManager ? 'wechat' : 'none'
   // #endif
 
   // #ifdef H5
-  if (hasXfyunConfig() && typeof WebSocket !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
-    return 'xfyun'
-  }
+  const cfg = getASRConfig()
+  const canWebSpeech = isWebSpeechSupported()
+  const canApi = !!(normalizeASRUrl(cfg.apiUrl) && cfg.apiKey)
+  const canXfyun =
+    hasXfyunConfig() && typeof WebSocket !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
+
+  // 用户显式选择的引擎优先
+  if (cfg.engine === 'webspeech' && canWebSpeech) return 'webspeech'
+  if (cfg.engine === 'api' && canApi) return 'api'
+  if (cfg.engine === 'xfyun' && canXfyun) return 'xfyun'
+
+  // 所选引擎不可用时回退：优先免配置的浏览器原生识别
+  if (canWebSpeech) return 'webspeech'
+  if (canApi) return 'api'
+  if (canXfyun) return 'xfyun'
   return 'none'
   // #endif
 
-  // fallback
+  // 其他平台
+  const c = getASRConfig()
+  if (c.engine === 'api' && normalizeASRUrl(c.apiUrl) && c.apiKey) return 'api'
   if (hasXfyunConfig() && typeof WebSocket !== 'undefined') return 'xfyun'
   return 'none'
+}
+
+/** 当前引擎是否需要用户配置（用于 UI 提示） */
+export function getVoiceModeLabel(): string {
+  const m = getVoiceMode()
+  const map: Record<string, string> = {
+    webspeech: '浏览器原生识别',
+    api: '自定义语音接口',
+    xfyun: '讯飞语音听写',
+    wechat: '微信同声传译',
+    none: '无可用方式',
+  }
+  return map[m] || m
 }
 
 export function isSupported(): boolean {
   return getVoiceMode() !== 'none'
 }
 
+// 记录本次实际启动的引擎，避免停止时因配置变化而误停
+let activeEngine: VoiceMode = 'none'
+
 export function startVoice(onResult: VoiceCallback, onError: ErrorCallback): boolean {
   const mode = getVoiceMode()
+  activeEngine = mode
 
+  if (mode === 'webspeech') return startWebSpeech(onResult, onError)
+  if (mode === 'wechat') return startWx(onResult, onError)
   if (mode === 'xfyun') {
     startXfyun(onResult, onError)
     return true
   }
-  if (mode === 'wechat') return startWx(onResult, onError)
+  if (mode === 'api') {
+    startApiASR(onResult, onError)
+    return true
+  }
 
-  onError('请先在 AI 设置中配置讯飞语音识别的 AppID、API Key、API Secret')
+  onError(
+    '当前没有可用的语音识别方式。可在设置中选择「浏览器原生识别」，或配置语音接口 / 讯飞凭证'
+  )
   return false
 }
 
 export function stopVoice() {
-  const mode = getVoiceMode()
-  if (mode === 'xfyun') stopXfyun()
-  else if (mode === 'wechat') stopWx()
+  if (activeEngine === 'webspeech') stopWebSpeech()
+  else if (activeEngine === 'api') stopApiASR()
+  else if (activeEngine === 'xfyun') stopXfyun()
+  else if (activeEngine === 'wechat') stopWx()
+  else {
+    // 兼容未记录引擎的情况，按当前配置停止
+    const mode = getVoiceMode()
+    if (mode === 'xfyun') stopXfyun()
+    else if (mode === 'wechat') stopWx()
+    else if (mode === 'webspeech') stopWebSpeech()
+    else if (mode === 'api') stopApiASR()
+  }
+  activeEngine = 'none'
   isListening = false
 }
 

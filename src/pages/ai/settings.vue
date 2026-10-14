@@ -88,12 +88,77 @@
         </view>
       </view>
 
-      <!-- Speech Recognition - iFlytek -->
+      <!-- Speech Recognition -->
       <view class="card">
-        <text class="section-title">🎙️ 语音识别配置（讯飞）</text>
-        <text class="desc">语音识别使用科大讯飞语音听写服务，实时返回识别结果，国内快速稳定。</text>
-        <view class="input-group">
-          <text class="input-label">AppID</text>
+        <text class="section-title">🎙️ 语音识别方式</text>
+        <text class="desc">可自行选择识别方式。未配置任何接口时，默认使用浏览器原生识别（Web Speech API），开箱即用。</text>
+
+        <view class="setting-item">
+          <text class="setting-label">识别方式</text>
+          <picker :range="asrOptions" :range-key="'name'" :value="asrIndex" @change="onAsrChange">
+            <view class="picker-value">
+              <text>{{ asrOptions[asrIndex].name }}</text>
+              <text class="picker-arrow">▸</text>
+            </view>
+          </picker>
+        </view>
+        <text class="setting-hint">{{ asrOptions[asrIndex].desc }}</text>
+
+        <!-- 自定义语音接口的配置项 -->
+        <block v-if="asrEngine === 'api'">
+          <view class="input-group">
+            <text class="input-label">接口地址</text>
+            <input
+              v-model="asrUrl"
+              class="input-field"
+              type="text"
+              placeholder="https://xxx/v1/audio/transcriptions"
+            />
+          </view>
+          <view class="input-group">
+            <text class="input-label">模型名称</text>
+            <input
+              v-model="asrModel"
+              class="input-field"
+              type="text"
+              placeholder="如 whisper-1"
+            />
+          </view>
+          <view class="input-group">
+            <text class="input-label">API Key</text>
+            <input
+              v-model="asrKey"
+              class="input-field"
+              type="text"
+              placeholder="语音接口的 API Key"
+              :password="!showAsrKey"
+            />
+            <view class="input-actions">
+              <view class="toggle-btn" @tap="showAsrKey = !showAsrKey">
+                <text class="toggle-text">{{ showAsrKey ? '隐藏' : '显示' }}</text>
+              </view>
+            </view>
+          </view>
+          <text class="setting-hint">接口地址可只填根地址（如 https://api.openai.com 或 .../v1），保存时会自动补全。采用 OpenAI 音频转写兼容格式。</text>
+          <view class="btn-row">
+            <view class="btn-secondary" @tap="testAsr">
+              <text>{{ asrTesting ? '测试中…' : '🧪 测试接口' }}</text>
+            </view>
+            <view class="btn-primary save-btn" @tap="saveAsr">保存</view>
+          </view>
+        </block>
+
+        <!-- 浏览器原生识别：无需配置 -->
+        <view v-else-if="asrEngine === 'webspeech'" class="asr-help">
+          <text class="asr-help-text">
+            {{ webSpeechSupported ? '当前浏览器支持原生识别，无需任何配置，点击麦克风即可说话。' : '当前浏览器不支持 Web Speech API，建议使用 Chrome / Edge / Safari，或改用自定义语音接口。' }}
+          </text>
+        </view>
+
+        <!-- 讯飞 -->
+        <block v-else>
+          <view class="input-group">
+            <text class="input-label">AppID</text>
           <input
             v-model="xfAppId"
             class="input-field"
@@ -135,6 +200,7 @@
         <view class="asr-help">
           <text class="asr-help-text">获取方式：访问 www.xfyun.cn → 控制台 → 语音识别 → 语音听写 → 创建应用获取 AppID / APIKey / APISecret</text>
         </view>
+        </block>
       </view>
 
       <!-- Status -->
@@ -151,16 +217,16 @@
         </view>
       </view>
 
-      <view class="card" v-if="hasXfyun">
+      <view class="card" v-if="activeEngineLabel && activeEngineLabel !== '无可用方式'">
         <view class="status-row">
           <text class="status-dot active" />
-          <text class="status-text">讯飞语音已配置，语音识别可用</text>
+          <text class="status-text">语音识别：{{ activeEngineLabel }}（可用）</text>
         </view>
       </view>
       <view class="card" v-else>
         <view class="status-row">
           <text class="status-dot" />
-          <text class="status-text">未配置讯飞语音，语音识别不可用</text>
+          <text class="status-text">暂无可用语音识别方式，请选择浏览器原生识别或配置语音接口</text>
         </view>
       </view>
     </view>
@@ -180,7 +246,18 @@ import {
   normalizeUrl,
   hasApiKey as checkHasApiKey,
 } from '../../utils/ai' // AI 服务商预设、配置读写、地址补全与连接测试
-import { setXfyunConfig, hasXfyunConfig, getXfyunConfig } from '../../utils/voice' // 讯飞语音识别配置的写入/检查/读取
+import {
+  ASR_OPTIONS,
+  getASRConfig,
+  setASRConfig,
+  normalizeASRUrl,
+  testASRConnection,
+  isWebSpeechSupported,
+  getVoiceModeLabel,
+  setXfyunConfig,
+  hasXfyunConfig,
+  getXfyunConfig,
+} from '../../utils/voice' // 语音识别：引擎配置、接口连通测试、浏览器原生识别检测与讯飞凭证读写
 
 // AI 服务配置
 const providers = AI_PROVIDERS
@@ -191,6 +268,18 @@ const apiKey = ref('')
 const showKey = ref(false)
 const hasKey = ref(false)
 const testing = ref(false)
+
+// 语音识别配置
+const asrOptions = ASR_OPTIONS
+const asrIndex = ref(0)
+const asrEngine = computed(() => asrOptions[asrIndex.value].key)
+const asrUrl = ref('')
+const asrModel = ref('')
+const asrKey = ref('')
+const showAsrKey = ref(false)
+const asrTesting = ref(false)
+const webSpeechSupported = ref(false)
+const activeEngineLabel = ref('')
 
 // 讯飞语音配置
 const xfAppId = ref('')
@@ -218,7 +307,71 @@ onMounted(() => {
   model.value = cfg.model
   hasKey.value = checkHasApiKey()
   hasXfyun.value = hasXfyunConfig()
+
+  // 语音识别配置
+  const asr = getASRConfig()
+  const ai = asrOptions.findIndex((o) => o.key === asr.engine)
+  asrIndex.value = ai >= 0 ? ai : 0
+  asrUrl.value = asr.apiUrl
+  asrModel.value = asr.model
+  webSpeechSupported.value = isWebSpeechSupported()
+  activeEngineLabel.value = getVoiceModeLabel()
 })
+
+function onAsrChange(e: any) {
+  asrIndex.value = Number(e.detail.value)
+  // 仅记录用户选择的引擎，具体凭证由下方表单保存
+  if (asrEngine.value !== 'xfyun') {
+    setASRConfig({ engine: asrEngine.value })
+  }
+  activeEngineLabel.value = getVoiceModeLabel()
+}
+
+/** 校验并收集自定义语音接口配置 */
+function collectAsr(): { engine: 'api'; apiUrl: string; apiKey: string; model: string } | null {
+  const url = asrUrl.value.trim()
+  const key = asrKey.value.trim()
+  const mdl = asrModel.value.trim()
+
+  if (!url) {
+    uni.showToast({ title: '请填写语音接口地址', icon: 'none' })
+    return null
+  }
+  if (!mdl) {
+    uni.showToast({ title: '请填写模型名称', icon: 'none' })
+    return null
+  }
+  if (!key) {
+    uni.showToast({ title: '请填写语音接口 API Key', icon: 'none' })
+    return null
+  }
+  return { engine: 'api', apiUrl: normalizeASRUrl(url), apiKey: key, model: mdl }
+}
+
+function saveAsr() {
+  const cfg = collectAsr()
+  if (!cfg) return
+  setASRConfig(cfg)
+  asrUrl.value = cfg.apiUrl
+  activeEngineLabel.value = getVoiceModeLabel()
+  uni.showToast({ title: '保存成功', icon: 'success' })
+}
+
+async function testAsr() {
+  const cfg = collectAsr()
+  if (!cfg) return
+  asrTesting.value = true
+  try {
+    const r = await testASRConnection(cfg)
+    uni.showToast({
+      title: r.msg.slice(0, 60),
+      icon: r.ok ? 'success' : 'none',
+      duration: 3000,
+    })
+  } finally {
+    asrTesting.value = false
+  }
+}
 
 function onProviderChange(e: any) {
   const idx = Number(e.detail.value)

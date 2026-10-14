@@ -57,6 +57,65 @@ export function executeCommand(action: VoiceAction): CommandResult {
   }
 }
 
+export interface BatchResult {
+  total: number
+  successCount: number
+  failCount: number
+  /** 汇总后的展示文案，多笔时形如「已记录 3 笔，共 ¥65.00」 */
+  message: string
+  navigateTo?: string
+  success: boolean
+}
+
+/**
+ * 批量执行语音解析出的多个动作（支持一句话多笔账）
+ * 单笔时沿用原有文案，多笔时汇总成功/失败数量，避免静默丢数据。
+ */
+export function executeCommands(actions: VoiceAction[]): BatchResult {
+  const list = (actions || []).filter((a) => a && a.action)
+  if (list.length === 0) {
+    return { total: 0, successCount: 0, failCount: 0, message: '没有可执行的动作', success: false }
+  }
+
+  const results = list.map((a) => executeCommand(a))
+  const oks = results.filter((r) => r.success)
+  const fails = results.filter((r) => !r.success)
+
+  // 取最后一个有效的跳转目标
+  const navigateTo = results.map((r) => r.navigateTo).filter(Boolean).pop()
+
+  if (list.length === 1) {
+    return {
+      total: 1,
+      successCount: oks.length,
+      failCount: fails.length,
+      message: results[0].message,
+      navigateTo,
+      success: results[0].success,
+    }
+  }
+
+  // 多笔：优先展示成功条数，失败原因一并列出
+  const parts: string[] = []
+  if (oks.length > 0) parts.push(`成功 ${oks.length} 笔`)
+  if (fails.length > 0) parts.push(`失败 ${fails.length} 笔`)
+  const summary = parts.join('，')
+
+  const detail = [
+    ...oks.map((r) => `✓ ${r.message}`),
+    ...fails.map((r) => `✗ ${r.message}`),
+  ].join('\n')
+
+  return {
+    total: list.length,
+    successCount: oks.length,
+    failCount: fails.length,
+    message: `${summary}\n${detail}`,
+    navigateTo,
+    success: oks.length > 0,
+  }
+}
+
 // ---------- Transaction ----------
 function execAddTransaction(p: Record<string, any>): CommandResult {
   const txStore = useTransactionStore()

@@ -582,7 +582,13 @@ export interface VoiceAction {
   confirmation: string
 }
 
-export async function parseVoiceCommand(
+/**
+ * 解析语音指令，返回动作数组（支持一句话包含多笔账）
+ *
+ * 提示词明确要求拆分多笔，因此"午饭30，打车15"会返回两个 add_transaction，
+ * 避免旧实现只取第一笔导致静默丢数据。
+ */
+export async function parseVoiceCommands(
   text: string,
   state: {
     categories: Category[]
@@ -591,7 +597,7 @@ export async function parseVoiceCommand(
     currentLedgerId: string
     budgetAmounts: { name: string; amount: number }[]
   }
-): Promise<VoiceAction> {
+): Promise<VoiceAction[]> {
   const expCats = state.categories.filter(c => c.kind === 'expense' && c.level === 1).map(c => c.name)
   const incCats = state.categories.filter(c => c.kind === 'income' && c.level === 1).map(c => c.name)
   const accNames = state.accounts.map(a => `${a.name}(${a.type})`)
@@ -600,7 +606,7 @@ export async function parseVoiceCommand(
   const messages: ChatMessage[] = [
     {
       role: 'system',
-      content: `你是记账App的语音控制AI。用户说一句话，你解析为JSON动作。
+      content: `你是记账App的语音控制AI。用户说一句话，你解析为一个或多个JSON动作。
 
 【当前数据】
 支出分类: ${expCats.join('、') || '无'}
@@ -633,16 +639,55 @@ export async function parseVoiceCommand(
 • 关键词"充值/转入/存入/加钱到账户/给账户添加" → update_balance
 • 关键词"花了/消费/买了/收到/赚了" → add_transaction
 
+【多笔拆分规则（极其重要）】
+用户一句话里说了多笔账，必须拆成多个动作，绝不能合并、绝不能只取第一笔：
+• "午饭30，打车15，咖啡20" → 3 个 add_transaction，金额分别为 30、15、20
+• "买菜58，又充了100话费" → 2 个 add_transaction
+• "早上包子5块，中午吃饭25，晚上打车18" → 3 个 add_transaction
+• "工资到账8000，顺便删掉测试分类" → 1 个 add_transaction + 1 个 delete_category
+每笔的金额、分类、账户、备注各自独立判断。
+只说了一笔时，actions 数组里就只放一个动作。
+
 【返回格式】
-只返回JSON：{"action":"动作名","params":{参数},"confirmation":"中文确认语"}
-如果听不懂，action用"unknown"，confirmation说明原因`,
+只返回JSON，不要任何解释文字：
+{"actions":[{"action":"动作名","params":{参数},"confirmation":"中文确认语"}]}
+如果听不懂，返回 {"actions":[{"action":"unknown","params":{},"confirmation":"说明原因"}]}`,
     },
     { role: 'user', content: text },
   ]
 
   const reply = await chat(messages, { temperature: 0.1 })
   const jsonStr = reply.replace(/```json?\s*/g, '').replace(/```/g, '').trim()
-  return JSON.parse(jsonStr) as VoiceAction
+  const parsed = JSON.parse(jsonStr)
+
+  // 兼容多种返回结构：数组 / {actions:[]} / 旧版单个对象
+  let list: VoiceAction[] = []
+  if (Array.isArray(parsed)) list = parsed
+  else if (Array.isArray(parsed?.actions)) list = parsed.actions
+  else if (parsed?.action) list = [parsed as VoiceAction]
+
+  return list
+    .filter((a) => a && typeof a.action === 'string')
+    .map((a) => ({
+      action: a.action,
+      params: a.params || {},
+      confirmation: a.confirmation || '',
+    }))
+}
+
+/** 兼容旧调用：只取解析结果中的第一个动作 */
+export async function parseVoiceCommand(
+  text: string,
+  state: {
+    categories: Category[]
+    accounts: Account[]
+    ledgers: { id: string; name: string }[]
+    currentLedgerId: string
+    budgetAmounts: { name: string; amount: number }[]
+  }
+): Promise<VoiceAction> {
+  const list = await parseVoiceCommands(text, state)
+  return list[0] || { action: 'unknown', params: {}, confirmation: '未能识别出可执行的记账动作' }
 }
 
 // ---------- Feature: Receipt OCR Parsing ----------

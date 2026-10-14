@@ -45,8 +45,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue' // Vue 组合式 API：ref/computed 响应式，onMounted/onBeforeUnmount 生命周期
 import { startVoice, stopVoice, hasXfyunConfig, getVoiceMode } from '../utils/voice' // 跨平台语音识别（讯飞/微信插件）
-import { parseVoiceCommand, hasApiKey } from '../utils/ai' // AI 解析语音文本为记账动作，检查是否已配置 API Key
-import { executeCommand } from '../utils/command' // 执行解析出的记账命令并返回结果
+import { parseVoiceCommands, hasApiKey } from '../utils/ai' // AI 解析语音文本为记账动作（支持一次多笔），检查是否已配置 API Key
+import { executeCommands } from '../utils/command' // 批量执行解析出的记账命令并返回汇总结果
 import { useCategoryStore, useAccountStore, useLedgerStore, useBudgetStore } from '../stores' // 分类/账户/账本/预算状态仓库
 
 type VcState = 'idle' | 'listening' | 'processing' | 'result'
@@ -336,7 +336,8 @@ async function processCommand(text: string) {
   vcState.value = 'processing'
   interimText.value = ''
   try {
-    const action = await parseVoiceCommand(text, {
+    // 一次解析可能返回多笔（如"午饭30，打车15"）
+    const actions = await parseVoiceCommands(text, {
       categories: catStore.categories,
       accounts: accStore.accounts,
       ledgers: ledgerStore.ledgers.map(l => ({ id: l.id, name: l.name })),
@@ -348,14 +349,23 @@ async function processCommand(text: string) {
           return { name, amount: b.amount }
         }),
     })
-    if (action.action === 'unknown') {
-      showResult(false, action.confirmation || '抱歉，没有理解您的指令')
+
+    const usable = actions.filter(a => a.action !== 'unknown')
+    if (usable.length === 0) {
+      showResult(false, actions[0]?.confirmation || '抱歉，没有理解您的指令')
       return
     }
-    resultMessage.value = action.confirmation
+
+    // 展示解析摘要，多笔时提示笔数
+    resultMessage.value =
+      usable.length > 1
+        ? `识别到 ${usable.length} 笔，正在记录…`
+        : usable[0].confirmation || '正在记录…'
     resultSuccess.value = true
     await new Promise(r => setTimeout(r, 500))
-    const result = executeCommand(action)
+
+    const result = executeCommands(usable)
+    if (result.navigateTo) uni.navigateTo({ url: result.navigateTo })
     showResult(result.success, result.message)
   } catch (e: any) {
     showResult(false, `AI 解析失败: ${e.message || '请重试'}`)
