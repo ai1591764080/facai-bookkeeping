@@ -263,6 +263,21 @@
           <text class="status-text">暂无可用语音识别方式，请选择浏览器原生识别或配置语音接口</text>
         </view>
       </view>
+
+      <!-- 配置备份：把设置项与账目数据分开备份 -->
+      <view class="card">
+        <text class="section-title">⚙️ 配置备份</text>
+        <text class="desc">导出全部设置：AI 服务、语音引擎与密钥、讯飞凭证、OCR、主题与货币等偏好。换设备或重装后一次导入即可恢复，不用再一项项重填。</text>
+        <view class="btn-row">
+          <view class="btn-secondary" @tap="exportConfigFile">
+            <text>📤 导出配置</text>
+          </view>
+          <view class="btn-primary" @tap="importConfigFile">
+            <text>📥 导入配置</text>
+          </view>
+        </view>
+        <text class="setting-hint">⚠️ 配置文件里包含 API Key 明文，请妥善保管、不要发给他人。账目数据请在「我的 → 导出」单独备份。</text>
+      </view>
     </view>
 
     <DraggableDock />
@@ -293,6 +308,14 @@ import {
   getXfyunConfig,
   micErrorMessage,
 } from '../../utils/voice' // 语音识别：引擎配置、接口连通测试、浏览器原生识别检测、麦克风错误提示与讯飞凭证读写
+import {
+  collectConfigFile,
+  configFileName,
+  validateConfigFile,
+  applyConfigFile,
+  configSummary,
+} from '../../utils/configBackup' // 配置备份：收集/校验/写入全部设置项
+import { saveTextFile, pickTextFile } from '../../utils/backup' // 跨平台文件存取：H5 下载与选文件、小程序转发/读取
 
 // AI 服务配置
 const providers = AI_PROVIDERS
@@ -355,6 +378,12 @@ onMounted(() => {
   hasKey.value = checkHasApiKey()
   hasXfyun.value = hasXfyunConfig()
 
+  // 回填已保存的讯飞凭证，方便核对是否已配置
+  const xf = getXfyunConfig()
+  xfAppId.value = xf.appId
+  xfApiKey.value = xf.apiKey
+  xfApiSecret.value = xf.apiSecret
+
   // 语音识别配置
   const asr = getASRConfig()
   const ai = asrOptions.findIndex((o) => o.key === asr.engine)
@@ -404,8 +433,10 @@ async function checkMic() {
 
 function onAsrChange(e: any) {
   asrIndex.value = Number(e.detail.value)
-  // 仅记录用户选择的引擎，具体凭证由下方表单保存
-  if (asrEngine.value !== 'xfyun') {
+  // 选择讯飞时：凭证已经配好就立刻生效，没配好则等保存凭证时再切换
+  if (asrEngine.value === 'xfyun') {
+    if (hasXfyunConfig()) setASRConfig({ engine: 'xfyun' })
+  } else {
     setASRConfig({ engine: asrEngine.value })
   }
   activeEngineLabel.value = getVoiceModeLabel()
@@ -531,11 +562,81 @@ function saveXfyunConfig() {
   }
 
   setXfyunConfig({ appId, apiKey: key, apiSecret: secret })
+  // 只存凭证不会切换引擎：必须同时把当前识别引擎改为讯飞，否则仍会走原来的引擎
+  setASRConfig({ engine: 'xfyun' })
   hasXfyun.value = true
-  uni.showToast({ title: '保存成功', icon: 'success' })
-  xfAppId.value = ''
-  xfApiKey.value = ''
-  xfApiSecret.value = ''
+  activeEngineLabel.value = getVoiceModeLabel()
+  // 保留已保存的凭证在输入框里，方便核对（此前会被清空，看起来像没保存）
+  xfAppId.value = appId
+  xfApiKey.value = key
+  xfApiSecret.value = secret
+  uni.showToast({ title: '已保存并切换到讯飞语音听写', icon: 'success' })
+}
+
+// ---------- 配置备份与恢复 ----------
+
+/** 导出全部配置到 JSON 文件 */
+async function exportConfigFile() {
+  const file = collectConfigFile()
+  const count = Object.keys(file.config).length
+  if (count === 0) {
+    uni.showToast({ title: '当前还没有任何配置可导出', icon: 'none' })
+    return
+  }
+  try {
+    await saveTextFile(JSON.stringify(file, null, 2), configFileName())
+    uni.showToast({ title: `已导出 ${count} 项配置`, icon: 'success' })
+  } catch (e: any) {
+    uni.showToast({ title: e?.message || '导出失败', icon: 'none' })
+  }
+}
+
+/** 选择配置文件并写入本地 */
+async function importConfigFile() {
+  let text = ''
+  try {
+    text = await pickTextFile()
+  } catch (e: any) {
+    uni.showToast({ title: e?.message || '未选择文件', icon: 'none' })
+    return
+  }
+
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch (e) {
+    uni.showToast({ title: '文件不是有效的 JSON', icon: 'none' })
+    return
+  }
+
+  const v = validateConfigFile(raw)
+  if (!v.ok) {
+    uni.showToast({ title: v.msg, icon: 'none' })
+    return
+  }
+
+  const items = configSummary(v.file)
+  uni.showModal({
+    title: '导入配置',
+    content: `将导入 ${items.length} 项配置并覆盖当前同名设置，是否继续？`,
+    success: (res) => {
+      if (!res.confirm) return
+      const n = applyConfigFile(v.file)
+      uni.showModal({
+        title: '导入完成',
+        content: `已写入 ${n} 项配置。主题、货币、每月起始日等项需要刷新页面后生效，是否立即刷新？`,
+        success: (r) => {
+          if (!r.confirm) return
+          // #ifdef H5
+          window.location.reload()
+          // #endif
+          // #ifndef H5
+          uni.reLaunch({ url: '/pages/index/index' })
+          // #endif
+        },
+      })
+    },
+  })
 }
 
 
