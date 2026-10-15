@@ -91,13 +91,13 @@
       <text class="voice-indicator-stop" @tap="stopVoiceInput">点击停止</text>
     </view>
 
-    <VoiceCommander />
+    <DraggableDock />
   </view>
 </template>
 
 <script setup lang="ts">
 import { ref, nextTick } from 'vue' // Vue 响应式与渲染调度：ref 响应式，nextTick 等 DOM 更新后再操作
-import VoiceCommander from '../../components/VoiceCommander.vue' // 语音记账组件
+import DraggableDock from '../../components/DraggableDock.vue' // 可拖拽、贴边折叠的工具条（添加/AI/语音），与各页面入口保持一致
 import { useAiStore, useTransactionStore, useCategoryStore, useAccountStore } from '../../stores' // AI/交易/分类/账户状态仓库
 import { chatAboutFinance } from '../../utils/ai' // 财务 AI 对话问答
 import { hasApiKey } from '../../utils/ai' // 检查是否已配置 AI API Key

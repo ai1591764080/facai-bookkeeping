@@ -265,13 +265,13 @@
       </view>
     </view>
 
-    <VoiceCommander />
+    <DraggableDock />
   </view>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue' // Vue 响应式与生命周期：ref/computed 响应式，onMounted 组件挂载后触发
-import VoiceCommander from '../../components/VoiceCommander.vue' // 语音记账组件
+import DraggableDock from '../../components/DraggableDock.vue' // 可拖拽、贴边折叠的工具条（添加/AI/语音），与各页面入口保持一致
 import {
   AI_PROVIDERS,
   getAIConfig,

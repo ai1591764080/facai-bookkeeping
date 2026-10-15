@@ -179,14 +179,14 @@
       </view>
     </view>
 
-    <VoiceCommander />
+    <DraggableDock />
   </view>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue' // Vue 响应式与侦听器：ref/computed 响应式，watch 监听变化，nextTick 等 DOM 更新后再执行
 import { onLoad } from '@dcloudio/uni-app' // uni-app 生命周期钩子：onLoad 页面加载时触发（读取编辑参数 id）
-import VoiceCommander from '../../components/VoiceCommander.vue' // 语音记账组件
+import DraggableDock from '../../components/DraggableDock.vue' // 可拖拽、贴边折叠的工具条（添加/AI/语音），与各页面入口保持一致
 import { useTransactionStore, useCategoryStore, useAccountStore, useLedgerStore } from '../../stores' // 交易/分类/账户/账本状态仓库
 import { uuid } from '../../utils/uuid' // 生成唯一 ID
 import { parseNaturalLanguage, hasApiKey } from '../../utils/ai' // 自然语言解析为记账信息、检查 API Key
