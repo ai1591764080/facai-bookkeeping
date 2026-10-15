@@ -273,9 +273,15 @@
             <text>📤 导出配置</text>
           </view>
           <view class="btn-primary" @tap="importConfigFile">
-            <text>📥 导入配置</text>
+            <text>📥 导入配置（文件）</text>
           </view>
         </view>
+        <view class="btn-row">
+          <view class="btn-secondary" @tap="importFromClipboard()">
+            <text>📋 从剪贴板导入</text>
+          </view>
+        </view>
+        <text class="setting-hint">进入本页会自动检查剪贴板，若里面是配置文件会直接提示导入；也可在页面上按 Ctrl/⌘+V 粘贴配置文本。导出后会顺带复制到剪贴板，方便粘到另一台设备。</text>
         <text class="setting-hint">⚠️ 配置文件里包含 API Key 明文，请妥善保管、不要发给他人。账目数据请在「我的 → 导出」单独备份。</text>
       </view>
     </view>
@@ -285,7 +291,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue' // Vue 响应式与生命周期：ref/computed 响应式，onMounted 组件挂载后触发
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue' // Vue 响应式与生命周期：ref/computed 响应式，onMounted 挂载后触发，onBeforeUnmount 卸载前清理
 import DraggableDock from '../../components/DraggableDock.vue' // 可拖拽、贴边折叠的工具条（添加/AI/语音），与各页面入口保持一致
 import {
   AI_PROVIDERS,
@@ -314,8 +320,12 @@ import {
   validateConfigFile,
   applyConfigFile,
   configSummary,
-} from '../../utils/configBackup' // 配置备份：收集/校验/写入全部设置项
+  readClipboardText,
+  writeClipboardText,
+  textFingerprint,
+} from '../../utils/configBackup' // 配置备份：收集/校验/写入全部设置项、剪贴板读写
 import { saveTextFile, pickTextFile } from '../../utils/backup' // 跨平台文件存取：H5 下载与选文件、小程序转发/读取
+import type { ConfigFile } from '../../utils/configBackup' // 配置文件类型
 
 // AI 服务配置
 const providers = AI_PROVIDERS
@@ -359,6 +369,9 @@ const showXfKey = ref(false)
 const showXfSecret = ref(false)
 const hasXfyun = ref(false)
 
+/** 进入页面后自动检查剪贴板的延时器，离开页面时清理 */
+let clipTimer: ReturnType<typeof setTimeout> | null = null
+
 const currentProvider = computed(() => providers[providerIndex.value])
 const currentProviderName = computed(() => currentProvider.value.name)
 const currentDoc = computed(() => currentProvider.value.doc)
@@ -397,6 +410,18 @@ onMounted(() => {
   // 非 https / 非 localhost 时浏览器不提供麦克风（局域网 IP 访问必然失败），先提示出来
   secureContext.value = typeof window !== 'undefined' ? !!window.isSecureContext : true
   detectMicPermission()
+  // 粘贴配置文本：在页面上按 Ctrl/⌘+V 也能触发导入（剪贴板读取被浏览器拒绝时仍可用）
+  document.addEventListener('paste', onPaste)
+  // #endif
+
+  // 进入页面后自动检查剪贴板，里面是配置文件就直接提示导入；延时是为了等页面拿到焦点
+  clipTimer = setTimeout(() => importFromClipboard(undefined, true), 1500)
+})
+
+onBeforeUnmount(() => {
+  if (clipTimer) clearTimeout(clipTimer)
+  // #ifdef H5
+  document.removeEventListener('paste', onPaste)
   // #endif
 })
 
@@ -575,7 +600,53 @@ function saveXfyunConfig() {
 
 // ---------- 配置备份与恢复 ----------
 
-/** 导出全部配置到 JSON 文件 */
+/** 已处理过的剪贴板内容指纹，避免同一段配置反复弹窗 */
+const HANDLED_CLIP_KEY = 'beecount_cfg_clip_handled'
+
+/** 刷新页面：主题、货币等存在内存 store 里的配置需要刷新才生效 */
+function reloadApp() {
+  // #ifdef H5
+  window.location.reload()
+  // #endif
+  // #ifndef H5
+  uni.reLaunch({ url: '/pages/index/index' })
+  // #endif
+}
+
+/** 解析配置文本，不是合法配置文件则返回 null */
+function parseConfigText(text: string): ConfigFile | null {
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch (e) {
+    return null
+  }
+  const v = validateConfigFile(raw)
+  return v.ok ? v.file : null
+}
+
+/** 确认后写入配置，并询问是否刷新 */
+function confirmAndApply(file: ConfigFile, extraInfo = '') {
+  const items = configSummary(file)
+  uni.showModal({
+    title: '导入配置',
+    content: `将导入 ${items.length} 项配置${extraInfo}并覆盖当前同名设置，是否继续？`,
+    success: (res) => {
+      if (!res.confirm) return
+      const n = applyConfigFile(file)
+      uni.showModal({
+        title: '导入完成',
+        content: `已写入 ${n} 项配置。主题、货币、每月起始日等项需要刷新页面后生效，是否立即刷新？`,
+        success: (r) => {
+          if (!r.confirm) return
+          reloadApp()
+        },
+      })
+    },
+  })
+}
+
+/** 导出全部配置到 JSON 文件，并顺带复制到剪贴板 */
 async function exportConfigFile() {
   const file = collectConfigFile()
   const count = Object.keys(file.config).length
@@ -583,12 +654,21 @@ async function exportConfigFile() {
     uni.showToast({ title: '当前还没有任何配置可导出', icon: 'none' })
     return
   }
+  const text = JSON.stringify(file, null, 2)
+  let copied = false
   try {
-    await saveTextFile(JSON.stringify(file, null, 2), configFileName())
-    uni.showToast({ title: `已导出 ${count} 项配置`, icon: 'success' })
+    await saveTextFile(text, configFileName())
+    copied = await writeClipboardText(text)
   } catch (e: any) {
     uni.showToast({ title: e?.message || '导出失败', icon: 'none' })
+    return
   }
+  // 自己导出的内容不再触发自动导入提示
+  uni.setStorageSync(HANDLED_CLIP_KEY, textFingerprint(text))
+  uni.showToast({
+    title: copied ? `已导出 ${count} 项配置，并已复制到剪贴板` : `已导出 ${count} 项配置`,
+    icon: 'success',
+  })
 }
 
 /** 选择配置文件并写入本地 */
@@ -600,43 +680,62 @@ async function importConfigFile() {
     uni.showToast({ title: e?.message || '未选择文件', icon: 'none' })
     return
   }
+  const file = parseConfigText(text)
+  if (!file) {
+    uni.showToast({ title: '文件不是有效的配置文件', icon: 'none' })
+    return
+  }
+  confirmAndApply(file)
+}
 
-  let raw: unknown
-  try {
-    raw = JSON.parse(text)
-  } catch (e) {
-    uni.showToast({ title: '文件不是有效的 JSON', icon: 'none' })
+/**
+ * 从剪贴板导入配置
+ * @param preset 已有文本时直接传入（如粘贴事件），否则主动读取剪贴板
+ * @param auto 是否为进入页面时的自动检测：读不到内容或不合法时静默跳过，且同一段内容只提示一次
+ */
+async function importFromClipboard(preset?: string, auto = false) {
+  const text = (preset !== undefined ? preset : await readClipboardText()).trim()
+  if (!text) {
+    if (!auto) uni.showToast({ title: '剪贴板为空，请先复制配置内容', icon: 'none' })
     return
   }
 
-  const v = validateConfigFile(raw)
-  if (!v.ok) {
-    uni.showToast({ title: v.msg, icon: 'none' })
+  const file = parseConfigText(text)
+  if (!file) {
+    if (!auto) uni.showToast({ title: '剪贴板内容不是有效的配置文件', icon: 'none' })
     return
   }
 
-  const items = configSummary(v.file)
+  const fp = textFingerprint(text)
+  if (auto && fp === uni.getStorageSync(HANDLED_CLIP_KEY)) return // 这段内容已经提示过，不再打扰
+
+  const when = file.exportedAt ? file.exportedAt.slice(0, 10) : ''
   uni.showModal({
-    title: '导入配置',
-    content: `将导入 ${items.length} 项配置并覆盖当前同名设置，是否继续？`,
+    title: auto ? '检测到配置' : '导入配置',
+    content: `剪贴板中有 ${configSummary(file).length} 项配置${when ? `（导出于 ${when}）` : ''}，是否导入并覆盖当前同名设置？`,
     success: (res) => {
+      uni.setStorageSync(HANDLED_CLIP_KEY, fp)
       if (!res.confirm) return
-      const n = applyConfigFile(v.file)
+      const n = applyConfigFile(file)
       uni.showModal({
         title: '导入完成',
         content: `已写入 ${n} 项配置。主题、货币、每月起始日等项需要刷新页面后生效，是否立即刷新？`,
         success: (r) => {
           if (!r.confirm) return
-          // #ifdef H5
-          window.location.reload()
-          // #endif
-          // #ifndef H5
-          uni.reLaunch({ url: '/pages/index/index' })
-          // #endif
+          reloadApp()
         },
       })
     },
   })
+}
+
+/** 页面内粘贴：内容恰好是配置文件时就走导入流程 */
+function onPaste(e: any) {
+  const text = e?.clipboardData?.getData?.('text') || ''
+  if (!text) return
+  if (!parseConfigText(text)) return // 普通文本粘贴不打断用户
+  if (e.preventDefault) e.preventDefault()
+  importFromClipboard(text)
 }
 
 

@@ -106,3 +106,54 @@ export function applyConfigFile(file: ConfigFile): number {
 export function configSummary(file: ConfigFile): { key: string; label: string }[] {
   return CONFIG_KEYS.filter((k) => file.config[k.key] !== undefined)
 }
+
+/** 读取剪贴板文本。H5 需页面聚焦且用户已授权，读不到时返回空串（静默失败） */
+export function readClipboardText(): Promise<string> {
+  return new Promise((resolve) => {
+    // #ifdef H5
+    const nav: any = typeof navigator !== 'undefined' ? navigator : null
+    if (nav && nav.clipboard && typeof nav.clipboard.readText === 'function') {
+      nav.clipboard
+        .readText()
+        .then((t: string) => resolve(String(t || '')))
+        .catch(() => resolve(''))
+      return
+    }
+    resolve('')
+    // #endif
+
+    // #ifndef H5
+    try {
+      uni.getClipboardData({
+        success: (r: any) => resolve(String(r?.data || '')),
+        fail: () => resolve(''),
+      })
+    } catch (e) {
+      resolve('')
+    }
+    // #endif
+  })
+}
+
+/** 把文本复制到剪贴板（导出后顺手复制，方便粘到另一台设备） */
+export function writeClipboardText(text: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      uni.setClipboardData({
+        data: text,
+        success: () => resolve(true),
+        fail: () => resolve(false),
+      })
+    } catch (e) {
+      resolve(false)
+    }
+  })
+}
+
+/** 文本指纹，用于判断剪贴板内容是否已经提示过，避免反复弹窗打扰 */
+export function textFingerprint(text: string): string {
+  let h = 5381
+  const s = text.slice(0, 8000)
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
+  return String(h)
+}
