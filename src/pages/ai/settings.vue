@@ -148,11 +148,45 @@
           </view>
         </block>
 
-        <!-- 浏览器原生识别：无需配置 -->
+        <!-- 浏览器原生识别：无需配置，但需要麦克风权限 + 能访问谷歌语音服务 -->
         <view v-else-if="asrEngine === 'webspeech'" class="asr-help">
           <text class="asr-help-text">
-            {{ webSpeechSupported ? '当前浏览器支持原生识别，无需任何配置，点击麦克风即可说话。' : '当前浏览器不支持 Web Speech API，建议使用 Chrome / Edge / Safari，或改用自定义语音接口。' }}
+            {{ webSpeechSupported ? '当前浏览器支持原生识别，无需填写配置。' : '当前浏览器不支持 Web Speech API，建议使用 Chrome / Edge / Safari，或改用自定义语音接口。' }}
           </text>
+
+          <!-- 麦克风权限状态 -->
+          <view class="perm-row">
+            <text class="perm-label">麦克风权限</text>
+            <text class="perm-state" :class="micPermission">{{ micPermissionText }}</text>
+          </view>
+          <view v-if="!secureContext" class="warn-box">
+            <text class="warn-text">
+              ⚠️ 当前不是安全环境（用局域网 IP 的 http 访问）。浏览器只在 https 或 localhost 下提供麦克风，请用 http://localhost:5173 打开，或改用自定义语音接口。
+            </text>
+          </view>
+
+          <view class="btn-row">
+            <view class="btn-secondary" @tap="checkMic">
+              <text>{{ micChecking ? '检测中…' : '🎤 检测麦克风' }}</text>
+            </view>
+          </view>
+          <text v-if="micCheckMsg" class="asr-help-text">{{ micCheckMsg }}</text>
+
+          <!-- 授权步骤 -->
+          <view class="guide-box">
+            <text class="guide-title">怎么给麦克风权限（Chrome / Edge）</text>
+            <text class="guide-step">1. 点击浏览器地址栏最左侧的 🔒 锁形图标</text>
+            <text class="guide-step">2. 找到「麦克风」，改为「允许」</text>
+            <text class="guide-step">3. 回到本页面，刷新后重新点击麦克风按钮</text>
+            <text class="guide-step">若之前点过「拒绝」：地址栏锁图标 → 网站设置 → 麦克风 → 允许；或在 chrome://settings/content/microphone 中把本站从「已阻止」里移除。</text>
+            <text class="guide-step">系统层面：Windows 设置 → 隐私 → 麦克风 → 允许桌面应用访问麦克风。</text>
+          </view>
+
+          <view class="warn-box">
+            <text class="warn-text">
+              ⚠️ Chrome / Edge 的「浏览器原生识别」实际要把录音上传到谷歌语音服务，国内网络大多连不上，表现为点了麦克风一直转圈或提示网络异常。这种情况请改用「自定义语音接口」（填任意 OpenAI 兼容的音频转写地址即可）。
+            </text>
+          </view>
         </view>
 
         <!-- 讯飞 -->
@@ -257,7 +291,8 @@ import {
   setXfyunConfig,
   hasXfyunConfig,
   getXfyunConfig,
-} from '../../utils/voice' // 语音识别：引擎配置、接口连通测试、浏览器原生识别检测与讯飞凭证读写
+  micErrorMessage,
+} from '../../utils/voice' // 语音识别：引擎配置、接口连通测试、浏览器原生识别检测、麦克风错误提示与讯飞凭证读写
 
 // AI 服务配置
 const providers = AI_PROVIDERS
@@ -280,6 +315,18 @@ const showAsrKey = ref(false)
 const asrTesting = ref(false)
 const webSpeechSupported = ref(false)
 const activeEngineLabel = ref('')
+
+// 麦克风权限与环境检测
+const micPermission = ref<'unknown' | 'granted' | 'denied' | 'prompt'>('unknown')
+const secureContext = ref(true)
+const micChecking = ref(false)
+const micCheckMsg = ref('')
+const micPermissionText = computed(() => {
+  if (micPermission.value === 'granted') return '✅ 已允许'
+  if (micPermission.value === 'denied') return '❌ 被拒绝'
+  if (micPermission.value === 'prompt') return '⚠️ 尚未授权'
+  return '❓ 未知'
+})
 
 // 讯飞语音配置
 const xfAppId = ref('')
@@ -316,7 +363,44 @@ onMounted(() => {
   asrModel.value = asr.model
   webSpeechSupported.value = isWebSpeechSupported()
   activeEngineLabel.value = getVoiceModeLabel()
+
+  // #ifdef H5
+  // 非 https / 非 localhost 时浏览器不提供麦克风（局域网 IP 访问必然失败），先提示出来
+  secureContext.value = typeof window !== 'undefined' ? !!window.isSecureContext : true
+  detectMicPermission()
+  // #endif
 })
+
+/** 读取麦克风权限状态（浏览器支持 permissions API 时可用） */
+async function detectMicPermission() {
+  try {
+    const perms: any = (navigator as any).permissions
+    if (perms && typeof perms.query === 'function') {
+      const st = await perms.query({ name: 'microphone' })
+      micPermission.value = (st.state as any) || 'unknown'
+      return
+    }
+  } catch (e) { /* 浏览器不支持则保持未知 */ }
+  micPermission.value = 'unknown'
+}
+
+/** 实际申请一次麦克风，用户点了允许就说明可用 */
+async function checkMic() {
+  if (micChecking.value) return
+  micChecking.value = true
+  micCheckMsg.value = ''
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    stream.getTracks().forEach((t) => t.stop())
+    micPermission.value = 'granted'
+    micCheckMsg.value = '✅ 麦克风可用。注意：这只是麦克风权限，Chrome/Edge 的原生识别还需要能连上谷歌语音服务，若点击后一直无反应请改用自定义语音接口。'
+  } catch (e: any) {
+    micPermission.value = 'denied'
+    micCheckMsg.value = '❌ ' + micErrorMessage(e)
+  } finally {
+    micChecking.value = false
+  }
+}
 
 function onAsrChange(e: any) {
   asrIndex.value = Number(e.detail.value)
@@ -547,6 +631,41 @@ function saveXfyunConfig() {
   color: var(--text-tertiary);
   line-height: 1.6;
 }
+
+/* 麦克风权限状态与指引 */
+.perm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16rpx;
+  padding: 16rpx 20rpx;
+  background: var(--bg-secondary, #f7f8fa);
+  border-radius: 12rpx;
+}
+.perm-label { font-size: 26rpx; color: var(--text-secondary); }
+.perm-state { font-size: 26rpx; font-weight: 600; }
+.perm-state.granted { color: #16a34a; }
+.perm-state.denied { color: #dc2626; }
+.perm-state.prompt { color: #f59e0b; }
+.perm-state.unknown { color: var(--text-tertiary); }
+
+.warn-box {
+  margin-top: 16rpx;
+  padding: 18rpx 20rpx;
+  background: #fffbeb;
+  border: 2rpx solid #fde68a;
+  border-radius: 12rpx;
+}
+.warn-text { font-size: 24rpx; color: #92400e; line-height: 1.6; }
+
+.guide-box {
+  margin-top: 20rpx;
+  padding: 20rpx;
+  background: var(--bg-secondary, #f7f8fa);
+  border-radius: 12rpx;
+}
+.guide-title { font-size: 26rpx; font-weight: 600; color: var(--text-primary); }
+.guide-step { display: block; margin-top: 10rpx; font-size: 24rpx; color: var(--text-secondary); line-height: 1.6; }
 
 /* Steps */
 .steps {

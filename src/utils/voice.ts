@@ -212,7 +212,7 @@ let pcmQueue: number[] = []
 let sendTimer: ReturnType<typeof setInterval> | null = null
 
 // 麦克风错误统一转为中文提示：getUserMedia 抛出的英文错误直接展示既看不懂又容易超出提示框
-function micErrorMessage(e: any): string {
+export function micErrorMessage(e: any): string {
   const name = String(e?.name || '')
   const msg = String(e?.message || '')
   if (name === 'NotFoundError' || name === 'DevicesNotFoundError' || /no device|not found/i.test(msg)) {
@@ -514,7 +514,14 @@ function startWebSpeech(onResult: VoiceCallback, onError: ErrorCallback): boolea
     rec.interimResults = true
     rec.maxAlternatives = 1
 
+    // 超时保护：原生识别依赖谷歌服务，连不上时会一直卡在"正在聆听"且不给任何回调
+    const startTimer = setTimeout(() => {
+      try { rec.stop() } catch (e) { /* 忽略未启动的异常 */ }
+      onError('浏览器原生识别无响应：Chrome / Edge 需要连接谷歌语音服务，国内网络通常连不上。建议改用「自定义语音接口」（设置页可切换）。')
+    }, 6000)
+
     rec.onresult = (ev: any) => {
+      clearTimeout(startTimer)
       let interim = ''
       let finalText = ''
       for (let i = ev.resultIndex || 0; i < ev.results.length; i++) {
@@ -528,19 +535,21 @@ function startWebSpeech(onResult: VoiceCallback, onError: ErrorCallback): boolea
     }
 
     rec.onerror = (ev: any) => {
+      clearTimeout(startTimer)
       const key = String(ev?.error || '')
       if (key === 'aborted') return
       const msgs: Record<string, string> = {
         'not-allowed': '麦克风权限被拒绝：请点击浏览器地址栏的锁形图标（或系统设置）允许使用麦克风，然后重试',
-        'service-not-allowed': '浏览器语音服务不可用，可改用自定义语音接口',
+        'service-not-allowed': '浏览器语音服务不可用（Chrome/Edge 的原生识别依赖谷歌服务，国内通常连不上），请改用自定义语音接口',
         'no-speech': '未检测到说话，请再试一次',
-        network: '网络异常，浏览器原生识别需要联网',
-        'audio-capture': '未找到麦克风设备',
+        network: '网络异常：Chrome/Edge 的浏览器原生识别要连接谷歌语音服务，国内网络基本连不上，建议改用自定义语音接口',
+        'audio-capture': '未找到麦克风设备，请检查设备或浏览器权限设置',
       }
       onError(msgs[key] || `语音识别失败：${key || '未知错误'}`)
     }
 
     rec.onend = () => {
+      clearTimeout(startTimer)
       isListening = false
     }
 
