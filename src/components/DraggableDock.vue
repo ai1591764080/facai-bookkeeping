@@ -26,9 +26,9 @@
         <view class="dvc-spinner" />
         <text class="dvc-text primary">AI 分析中...</text>
       </view>
-      <view v-else-if="vcState === 'result'" class="dvc-bar" :class="resultSuccess ? 'success' : 'error'">
+      <view v-else-if="vcState === 'result'" class="dvc-bar result" :class="resultSuccess ? 'success' : 'error'">
         <text class="dvc-result-icon">{{ resultSuccess ? '✅' : '❌' }}</text>
-        <text class="dvc-text">{{ resultMessage }}</text>
+        <text class="dvc-text wrap">{{ resultMessage }}</text>
       </view>
     </view>
 
@@ -43,7 +43,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue' // Vue 组合式 API：ref/computed 响应式，onMounted/onBeforeUnmount 生命周期
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue' // Vue 组合式 API：ref/computed 响应式，onMounted/onBeforeUnmount 生命周期，nextTick 等 DOM 更新后再测量
 import { startVoice, stopVoice, hasXfyunConfig, getVoiceMode } from '../utils/voice' // 跨平台语音识别（讯飞/微信插件）
 import { parseVoiceCommands, hasApiKey } from '../utils/ai' // AI 解析语音文本为记账动作（支持一次多笔），检查是否已配置 API Key
 import { executeCommands } from '../utils/command' // 批量执行解析出的记账命令并返回汇总结果
@@ -177,7 +177,13 @@ function expand() {
 
 function clampKeepInView() {
   const { w, h } = currentSize()
-  fabPos.value = clampPos(fabPos.value.x, fabPos.value.y, w, h)
+  let realH = h
+  // 结果文案多行展示时实际高度会大于预设值，按真实高度约束，避免底部被截断
+  // #ifdef H5
+  const el = dockEl || (typeof document !== 'undefined' ? (document.querySelector('.dock') as HTMLElement | null) : null)
+  if (el && el.offsetHeight) realH = el.offsetHeight
+  // #endif
+  fabPos.value = clampPos(fabPos.value.x, fabPos.value.y, w, realH)
 }
 
 // ===== touch（移动端） =====
@@ -376,10 +382,13 @@ function showResult(success: boolean, message: string) {
   resultSuccess.value = success
   resultMessage.value = message
   vcState.value = 'result'
+  // 结果条高度随文案变化，等 DOM 更新后重新约束到可视区内
+  nextTick(() => clampKeepInView())
   if (resultTimer) clearTimeout(resultTimer)
+  // 错误文案较长，停留时间比成功时更久，保证读完
   resultTimer = setTimeout(() => {
     resetVoice()
-  }, 4000)
+  }, success ? 4000 : 7000)
 }
 
 function resetVoice() {
@@ -484,6 +493,17 @@ function resetVoice() {
 .dvc-bar.success { background: #f0fdf4; border-color: var(--income); }
 .dvc-bar.error { background: #fef2f2; border-color: var(--expense); }
 .dvc-text { font-size: 15px; flex: 1; color: #fff; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* 结果态：文案可能较长（如麦克风权限被拒绝的解决办法），改为多行完整展示 */
+.dvc-bar.result {
+  height: auto;
+  min-height: 60px;
+  max-height: 150px;
+  padding: 12px 20px;
+  align-items: flex-start;
+  border-radius: 22px;
+}
+.dvc-text.wrap { white-space: normal; word-break: break-word; line-height: 1.45; max-height: 126px; overflow-y: auto; }
+.dvc-bar.result .dvc-result-icon { margin-top: 2px; }
 .dvc-text.primary { color: var(--primary); font-weight: 600; }
 .dvc-bar.success .dvc-text { color: #166534; }
 .dvc-bar.error .dvc-text { color: #991b1b; }

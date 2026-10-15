@@ -211,6 +211,22 @@ let processor: ScriptProcessorNode | null = null
 let pcmQueue: number[] = []
 let sendTimer: ReturnType<typeof setInterval> | null = null
 
+// 麦克风错误统一转为中文提示：getUserMedia 抛出的英文错误直接展示既看不懂又容易超出提示框
+function micErrorMessage(e: any): string {
+  const name = String(e?.name || '')
+  const msg = String(e?.message || '')
+  if (name === 'NotFoundError' || name === 'DevicesNotFoundError' || /no device|not found/i.test(msg)) {
+    return '未检测到麦克风设备，请检查设备连接后重试'
+  }
+  if (name === 'NotAllowedError' || name === 'SecurityError' || /permission|denied|拒绝/i.test(msg)) {
+    return '麦克风权限被拒绝：请点击浏览器地址栏的锁形图标（或系统设置）允许使用麦克风，然后重试'
+  }
+  if (name === 'NotReadableError' || name === 'TrackStartError') {
+    return '麦克风被其它程序占用，请关闭后重试'
+  }
+  return `无法访问麦克风：${msg || '未知错误'}`
+}
+
 async function startXfyun(onResult: VoiceCallback, onError: ErrorCallback): Promise<boolean> {
   const config = getXfyunConfig()
   if (!config.appId || !config.apiKey || !config.apiSecret) {
@@ -224,7 +240,7 @@ async function startXfyun(onResult: VoiceCallback, onError: ErrorCallback): Prom
       audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true }
     })
   } catch (e: any) {
-    onError(`无法访问麦克风: ${e.message || '权限被拒绝'}`)
+    onError(micErrorMessage(e))
     return false
   }
 
@@ -515,7 +531,7 @@ function startWebSpeech(onResult: VoiceCallback, onError: ErrorCallback): boolea
       const key = String(ev?.error || '')
       if (key === 'aborted') return
       const msgs: Record<string, string> = {
-        'not-allowed': '麦克风权限被拒绝，请在浏览器中允许使用麦克风',
+        'not-allowed': '麦克风权限被拒绝：请点击浏览器地址栏的锁形图标（或系统设置）允许使用麦克风，然后重试',
         'service-not-allowed': '浏览器语音服务不可用，可改用自定义语音接口',
         'no-speech': '未检测到说话，请再试一次',
         network: '网络异常，浏览器原生识别需要联网',
@@ -635,7 +651,7 @@ async function startApiASR(onResult: VoiceCallback, onError: ErrorCallback): Pro
       audio: { echoCancellation: true, noiseSuppression: true },
     })
   } catch (e: any) {
-    onError(`无法访问麦克风：${e?.message || '权限被拒绝'}`)
+    onError(micErrorMessage(e))
     return false
   }
 

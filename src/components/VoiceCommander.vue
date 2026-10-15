@@ -284,10 +284,11 @@ function showResult(success: boolean, message: string) {
   state.value = 'result'
 
   if (resultTimer) clearTimeout(resultTimer)
+  // 错误文案较长，停留更久，保证读完
   resultTimer = setTimeout(() => {
     state.value = 'idle'
     resultMessage.value = ''
-  }, 3500)
+  }, success ? 3500 : 7000)
 }
 </script>
 
@@ -480,21 +481,31 @@ function showResult(success: boolean, message: string) {
   box-shadow: 0 8rpx 24rpx rgba(255, 107, 107, 0.2);
 }
 
+/* 结果态：文案较长（如麦克风权限被拒绝的处理办法）时高度自适应，避免被截断 */
+.vc-fab.result .vc-bar {
+  height: auto;
+  min-height: 100rpx;
+  max-height: 280rpx;
+  padding: 20rpx 32rpx;
+  align-items: flex-start;
+  border-radius: 36rpx;
+}
+
 .vc-result-icon {
   font-size: 32rpx;
   flex-shrink: 0;
   margin-right: 16rpx;
 }
+.vc-fab.result .vc-result-icon { margin-top: 4rpx; }
 
 .vc-result-text {
   font-size: 26rpx;
   flex: 1;
-  line-height: 1.4;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  line-height: 1.45;
+  white-space: normal;
+  word-break: break-word;
+  max-height: 220rpx;
+  overflow-y: auto;
 }
 
 .vc-bar.success .vc-result-text { color: #166534; }
