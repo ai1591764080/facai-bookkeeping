@@ -6,7 +6,7 @@
         <view class="nav-back" @tap="goBack">
           <text class="nav-back-icon">&#10094;</text>
         </view>
-        <text class="nav-title">记一笔</text>
+        <text class="nav-title">{{ isEdit ? '编辑记录' : '记一笔' }}</text>
         <view class="nav-placeholder"></view>
       </view>
     </view>
@@ -14,8 +14,8 @@
     <!-- Spacer for fixed nav -->
     <view :style="{ height: (statusBarHeight + 44) + 'px' }"></view>
 
-    <!-- AI Quick Input Bar -->
-    <view class="ai-input-bar">
+    <!-- AI Quick Input Bar（编辑已有记录时隐藏） -->
+    <view v-if="!isEdit" class="ai-input-bar">
       <view class="ai-mic-btn" :class="{ recording: isRecording }" @tap="toggleVoice">
         <text v-if="isRecording" class="ai-mic-icon recording">🔴</text>
         <text v-else class="ai-mic-icon">🎙️</text>
@@ -33,8 +33,8 @@
       </view>
     </view>
 
-    <!-- Scan Receipt Entry -->
-    <view class="scan-entry" @tap="goScan">
+    <!-- Scan Receipt Entry（编辑已有记录时隐藏） -->
+    <view v-if="!isEdit" class="scan-entry" @tap="goScan">
       <text class="scan-entry-icon">📷</text>
       <text class="scan-entry-text">扫描小票 / 账单，AI 智能归档</text>
       <text class="scan-entry-arrow">›</text>
@@ -154,6 +154,11 @@
       </view>
     </view>
 
+    <!-- 编辑模式：删除当前记录 -->
+    <view v-if="isEdit" class="delete-row" @tap="onDeleteCurrent">
+      <text class="delete-text">🗑 删除此记录</text>
+    </view>
+
     <!-- Numeric Keypad -->
     <view class="keypad-wrapper">
       <view class="keypad">
@@ -179,7 +184,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue' // Vue 响应式与侦听器：ref/computed 响应式，watch 监听变化
+import { ref, computed, watch, nextTick } from 'vue' // Vue 响应式与侦听器：ref/computed 响应式，watch 监听变化，nextTick 等 DOM 更新后再执行
+import { onLoad } from '@dcloudio/uni-app' // uni-app 生命周期钩子：onLoad 页面加载时触发（读取编辑参数 id）
 import VoiceCommander from '../../components/VoiceCommander.vue' // 语音记账组件
 import { useTransactionStore, useCategoryStore, useAccountStore, useLedgerStore } from '../../stores' // 交易/分类/账户/账本状态仓库
 import { uuid } from '../../utils/uuid' // 生成唯一 ID
@@ -222,6 +228,7 @@ const selectedCategoryId = ref<string>('')
 
 // Watch type change and reset category
 watch(currentType, () => {
+  if (filling) return
   const cats = currentCategories.value
   if (cats.length > 0) {
     selectedCategoryId.value = cats[0].id
@@ -277,6 +284,47 @@ function toggleAccountPicker() {
 function onSelectAccount(id: string) {
   selectedAccountId.value = id
   showAccountPicker.value = false
+}
+
+// ---------- 编辑模式（从明细列表点进来时带 id） ----------
+const editingTxId = ref('')
+const isEdit = computed(() => !!editingTxId.value)
+let filling = false // 回填表单期间禁止 watch 重置已选分类
+
+onLoad((options: any) => {
+  const id = options?.id
+  if (!id) return
+  const tx = txStore.transactions.find((t) => t.id === id)
+  if (!tx) {
+    uni.showToast({ title: '记录不存在或已删除', icon: 'none' })
+    return
+  }
+  filling = true
+  editingTxId.value = tx.id
+  currentType.value = tx.type
+  amountStr.value = String(tx.amount)
+  selectedCategoryId.value = tx.categoryId
+  selectedAccountId.value = tx.accountId
+  noteStr.value = tx.note || ''
+  selectedDate.value = new Date(tx.happenedAt)
+  nextTick(() => { filling = false })
+})
+
+function onDeleteCurrent() {
+  const id = editingTxId.value
+  if (!id) return
+  uni.showModal({
+    title: '删除记录',
+    content: '确定删除这条记录吗？删除后账户余额会同步回滚。',
+    success: (res) => {
+      if (!res.confirm) return
+      txStore.remove(id)
+      uni.showToast({ title: '已删除', icon: 'success' })
+      setTimeout(() => {
+        uni.navigateBack()
+      }, 500)
+    },
+  })
 }
 
 // Keypad
@@ -340,6 +388,33 @@ function confirmTransaction() {
     return
   }
 
+  const nowIso = new Date().toISOString()
+  const happenedAt = selectedDate.value.toISOString()
+
+  // 编辑已有记录：保留原 id/账本/创建时间，只更新可编辑字段
+  if (isEdit.value) {
+    const old = txStore.transactions.find((t) => t.id === editingTxId.value)
+    if (!old) {
+      uni.showToast({ title: '记录不存在或已删除', icon: 'none' })
+      return
+    }
+    txStore.update({
+      ...old,
+      type: currentType.value,
+      amount,
+      categoryId: selectedCategoryId.value,
+      accountId: selectedAccountId.value,
+      happenedAt,
+      note: noteStr.value,
+      updatedAt: nowIso,
+    })
+    uni.showToast({ title: '已保存', icon: 'success' })
+    setTimeout(() => {
+      uni.navigateBack()
+    }, 500)
+    return
+  }
+
   const tx = {
     id: uuid(),
     ledgerId: ledgerStore.currentId,
@@ -347,10 +422,10 @@ function confirmTransaction() {
     amount,
     categoryId: selectedCategoryId.value,
     accountId: selectedAccountId.value,
-    happenedAt: selectedDate.value.toISOString(),
+    happenedAt,
     note: noteStr.value,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: nowIso,
+    updatedAt: nowIso,
     excludeFromStats: false,
     excludeFromBudget: false
   }
@@ -942,6 +1017,20 @@ function stopVoiceInput() {
   color: var(--text-secondary);
   white-space: nowrap;
 }
+
+/* 编辑模式删除按钮 */
+.delete-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 16rpx 32rpx 0;
+  padding: 22rpx 0;
+  border-radius: 16rpx;
+  background: #fef2f2;
+  border: 2rpx solid #fecaca;
+}
+.delete-row:active { background: #fee2e2; }
+.delete-text { font-size: 28rpx; color: #dc2626; font-weight: 600; }
 
 /* Keypad Wrapper */
 .keypad-wrapper {

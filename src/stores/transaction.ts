@@ -2,26 +2,51 @@ import { defineStore } from 'pinia' // Pinia：defineStore 定义一个响应式
 import { ref, computed } from 'vue' // Vue 响应式：ref 声明响应式数据，computed 派生计算值
 import type { Transaction } from '../types' // 交易记录的类型定义
 import { getTransactions, saveTransactions, addTransaction as dbAdd, updateTransaction as dbUpdate, deleteTransaction as dbDelete } from '../utils/db' // 本地存储封装：读取/保存/增删交易记录
+import { useAccountStore } from './account' // 账户仓库：交易增删时同步账户余额
 
 export const useTransactionStore = defineStore('transaction', () => {
   const transactions = ref<Transaction[]>(getTransactions())
 
   const totalCount = computed(() => transactions.value.length)
 
+  /**
+   * 交易与账户余额联动：sign = 1 应用，sign = -1 撤销。
+   * 记账/编辑/删除统一走这里，避免各入口各自处理导致余额对不上
+   * （此前只有扫描归档会改余额，手工与 AI 记账不改，删账也不回滚）。
+   */
+  function applyBalance(t: Transaction, sign: 1 | -1) {
+    if (!t || !t.amount) return
+    const accStore = useAccountStore()
+    if (t.type === 'transfer') {
+      if (t.accountId) accStore.adjustBalance(t.accountId, -t.amount * sign)
+      if (t.toAccountId) accStore.adjustBalance(t.toAccountId, t.amount * sign)
+      return
+    }
+    if (!t.accountId) return
+    accStore.adjustBalance(t.accountId, (t.type === 'income' ? t.amount : -t.amount) * sign)
+  }
+
   function add(t: Transaction) {
     dbAdd(t)
     transactions.value.unshift(t)
+    applyBalance(t, 1)
   }
 
   function update(t: Transaction) {
+    const old = transactions.value.find((x) => x.id === t.id)
     dbUpdate(t)
     const idx = transactions.value.findIndex((x) => x.id === t.id)
     if (idx !== -1) transactions.value[idx] = t
+    // 先撤销旧交易的余额影响，再应用新的，保证改金额/改账户后余额正确
+    if (old) applyBalance(old, -1)
+    applyBalance(t, 1)
   }
 
   function remove(id: string) {
+    const t = transactions.value.find((x) => x.id === id)
     dbDelete(id)
     transactions.value = transactions.value.filter((x) => x.id !== id)
+    if (t) applyBalance(t, -1)
   }
 
   function reload() {

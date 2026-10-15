@@ -73,7 +73,8 @@
               v-for="tx in group.items"
               :key="tx.id"
               class="list-item"
-              @longpress="onDeleteTx(tx.id)"
+              @tap="openTx(tx.id)"
+              @longpress="onDeleteTx(tx)"
             >
               <view class="list-icon">
                 <text>{{ getCategoryIcon(tx.categoryId) }}</text>
@@ -88,6 +89,11 @@
               >
                 {{ tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : '' }}{{ formatAmount(tx.amount) }}
               </text>
+              <!-- 删除入口：点击直接删除，长按同样可以删除 -->
+              <view class="list-del" @tap.stop="onDeleteTx(tx)">
+                <text class="list-del-icon">🗑</text>
+              </view>
+              <text class="list-arrow">›</text>
             </view>
           </view>
         </view>
@@ -235,14 +241,22 @@ function onSwitchLedger(id: string) {
   showLedgerPicker.value = false
 }
 
+// 点击明细：进入编辑页（页内可修改或删除）
+function openTx(id: string) {
+  uni.navigateTo({ url: `/pages/add/add?id=${id}` })
+}
+
 // Delete transaction
-function onDeleteTx(id: string) {
+function onDeleteTx(tx: any) {
+  const name = getCategoryName(tx.categoryId)
+  const sign = tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''
   uni.showModal({
-    title: '提示',
-    content: '确定删除这条记录吗？',
+    title: '删除记录',
+    content: `确定删除「${name} ${sign}${formatAmount(tx.amount)}」这条记录吗？删除后账户余额会同步回滚。`,
     success(res) {
       if (res.confirm) {
-        txStore.remove(id)
+        txStore.remove(tx.id)
+        uni.showToast({ title: '已删除', icon: 'success' })
       }
     }
   })
@@ -402,6 +416,22 @@ function onRefresh() {
 .tx-group-body .list-item:last-child {
   border-bottom: none;
 }
+
+/* 明细行右侧删除入口：点击进入编辑，点垃圾桶/长按直接删除 */
+.list-del {
+  flex-shrink: 0;
+  width: 56rpx;
+  height: 56rpx;
+  margin-left: 12rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.08);
+}
+.list-del:active { background: rgba(239, 68, 68, 0.18); }
+.list-del-icon { font-size: 28rpx; }
+.list-arrow { flex-shrink: 0; margin-left: 4rpx; font-size: 28rpx; color: #c0c4cc; }
 
 /* AI Quick Bar */
 .ai-bar {

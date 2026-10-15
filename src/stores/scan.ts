@@ -62,8 +62,7 @@ export const useScanStore = defineStore('scan', () => {
     categories: Category[],
     accounts: Account[],
     ledgerId: string,
-    onAddTransaction: (tx: Transaction) => void,
-    onAdjustBalance: (accountId: string, delta: number) => void
+    onAddTransaction: (tx: Transaction) => void
   ): { created: number } {
     const rec = records.value.find((x) => x.id === id)
     if (!rec || rec.status !== 'pending') return { created: 0 }
@@ -80,10 +79,9 @@ export const useScanStore = defineStore('scan', () => {
       if (!cat || !acc) continue
 
       const tx = buildTransaction(cand, cat, acc, ledgerId)
+      // 账户余额由交易仓库统一联动，这里不再单独调整，避免重复计算
       onAddTransaction(tx)
       txIds.push(tx.id)
-      // 同步账户余额：支出减少、收入增加
-      onAdjustBalance(acc.id, cand.type === 'expense' ? -Math.abs(cand.amount) : Math.abs(cand.amount))
     }
 
     updateRecord(id, {

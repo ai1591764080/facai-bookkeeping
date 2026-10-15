@@ -38,8 +38,7 @@ function agreeArchive(rec: any) {
         categoryStore.categories,
         accountStore.visibleAccounts,
         ledgerStore.currentId,
-        (tx) => txStore.add(tx),
-        (accId, delta) => accountStore.adjustBalance(accId, delta)
+        (tx) => txStore.add(tx)
       )
       uni.showToast({ title: `已归档 ${result.created} 条账单`, icon: 'success' })
     },
@@ -58,12 +57,19 @@ function rejectRec(rec: any) {
 }
 
 function deleteRec(rec: any) {
+  // 已归档的记录同时删除它生成的账单，否则记录没了、账还在
+  const linked = (rec.transactionIds || []).filter((id: string) => txStore.transactions.some((t) => t.id === id))
+  const tip = linked.length > 0
+    ? `确定删除这条扫描记录吗？同时会删除它已归档的 ${linked.length} 笔账单（账户余额将同步回滚）。`
+    : '确定删除这条扫描记录吗？'
   uni.showModal({
     title: '删除记录',
-    content: '确定删除这条扫描记录吗？',
+    content: tip,
     success: (res) => {
       if (!res.confirm) return
+      linked.forEach((id: string) => txStore.remove(id))
       scanStore.removeRecord(rec.id)
+      uni.showToast({ title: '已删除', icon: 'success' })
     },
   })
 }

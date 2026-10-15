@@ -167,8 +167,7 @@ function confirmArchive() {
           categoryStore.categories,
           accountStore.visibleAccounts,
           ledgerStore.currentId,
-          (tx) => txStore.add(tx),
-          (accId, delta) => accountStore.adjustBalance(accId, delta)
+          (tx) => txStore.add(tx)
         )
         uni.showToast({ title: `已归档 ${result.created} 条账单`, icon: 'success' })
         resetAll()

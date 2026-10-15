@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue' // Vue 响应式：ref 声明响应式数据，computed 派生计算值
-import { useCategoryStore } from '../../stores' // 分类状态仓库
+import { useCategoryStore, useTransactionStore } from '../../stores' // 分类、交易状态仓库
 import type { Category } from '../../types' // 分类的类型定义
 
 const categoryStore = useCategoryStore()
+const txStore = useTransactionStore()
 
 const activeTab = ref<'expense' | 'income'>('expense')
 
@@ -26,9 +27,13 @@ function onAddCategory() {
 }
 
 function onDeleteCategory(cat: Category) {
+  // 删除前提示关联记录数量，避免账目悄悄变成「未分类」
+  const used = txStore.transactions.filter((t) => t.categoryId === cat.id).length
   uni.showModal({
     title: '确认删除',
-    content: `确定要删除分类「${cat.name}」吗？`,
+    content: used > 0
+      ? `分类「${cat.name}」下有 ${used} 笔记录，删除后这些记录将显示为「未分类」，确定删除吗？`
+      : `确定要删除分类「${cat.name}」吗？`,
     success(res) {
       if (res.confirm) {
         categoryStore.removeCategory(cat.id)

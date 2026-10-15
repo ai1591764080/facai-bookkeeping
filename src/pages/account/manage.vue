@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue' // Vue 响应式：computed 派生计算值
-import { useAccountStore } from '../../stores' // 账户状态仓库
+import { useAccountStore, useTransactionStore } from '../../stores' // 账户、交易状态仓库
 import type { Account } from '../../types' // 账户的类型定义
 
 const accountStore = useAccountStore()
+const txStore = useTransactionStore()
 
 const typeLabels: Record<string, string> = {
   cash: '现金',
@@ -29,9 +30,13 @@ function onAddAccount() {
 }
 
 function onDeleteAccount(acc: Account) {
+  // 删除前提示关联记录数量，避免账目悄悄失去账户归属
+  const used = txStore.transactions.filter((t) => t.accountId === acc.id || t.toAccountId === acc.id).length
   uni.showModal({
     title: '确认删除',
-    content: `确定要删除账户「${acc.name}」吗？`,
+    content: used > 0
+      ? `账户「${acc.name}」关联了 ${used} 笔记录，删除后这些记录将不再属于任何账户，确定删除吗？`
+      : `确定要删除账户「${acc.name}」吗？`,
     success(res) {
       if (res.confirm) {
         accountStore.remove(acc.id)
