@@ -450,6 +450,17 @@ function resetVoice() {
 }
 .dock-grip-dots { font-size: 20px; color: rgba(79, 110, 247, 0.5); line-height: 1; }
 
+/* 深色模式：悬浮工具条原本是半透明白底，深色下改为深灰底 */
+html[data-theme='dark'] .dock-btns {
+  background: rgba(38, 41, 54, 0.92);
+  border-color: rgba(108, 134, 255, 0.28);
+}
+html[data-theme='dark'] .dock.collapsed::before {
+  background: rgba(38, 41, 54, 0.92);
+  border-color: rgba(108, 134, 255, 0.35);
+  color: #8fa2ff;
+}
+
 /* ===== 折叠态窄条 ===== */
 .dock.collapsed::before {
   content: '⠿';

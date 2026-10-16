@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import { onLaunch } from '@dcloudio/uni-app' // uni-app 生命周期钩子：onLaunch 在应用启动时执行一次
-import { useLedgerStore, useCategoryStore, useAccountStore } from './stores' // 账本/分类/账户 store：启动时初始化默认数据
+import {
+  useLedgerStore,
+  useCategoryStore,
+  useAccountStore,
+  useSettingsStore,
+} from './stores' // 账本/分类/账户/设置 store：启动时初始化默认数据并应用主题
 
 onLaunch(() => {
   // Initialize stores - this triggers default data creation on first launch
   useLedgerStore()
   useCategoryStore()
   useAccountStore()
+  useSettingsStore()
 })
 </script>
 
@@ -27,6 +33,40 @@ onLaunch(() => {
   --shadow: rgba(0, 0, 0, 0.04);
   --radius: 16rpx;
   --radius-lg: 24rpx;
+}
+
+/*
+ * 深色模式：只覆盖 :root 上的 CSS 变量，全站颜色都走 var()，因此一处切换整站生效
+ * 属性由 stores/settings.ts 的 applyTheme() 写到 <html data-theme="dark">
+ */
+html[data-theme='dark'] {
+  --primary: #6C86FF;
+  --primary-light: #232842;
+  --primary-dark: #8FA2FF;
+  --expense: #FF8787;
+  --income: #69DB7C;
+  --transfer: #74C0FC;
+  --bg: #12131A;
+  --card: #1C1E27;
+  --text-primary: #ECEEF5;
+  --text-secondary: #9AA0B4;
+  --text-tertiary: #6B7186;
+  --border: #2A2D3A;
+  --shadow: rgba(0, 0, 0, 0.35);
+}
+
+/* 深色下让浏览器滚动条、表单控件等跟随，避免亮色残留 */
+html[data-theme='dark'] body {
+  background-color: var(--bg);
+  color: var(--text-primary);
+  color-scheme: dark;
+}
+
+/* 输入框/文本域在深色下的默认底色与文字色 */
+html[data-theme='dark'] input,
+html[data-theme='dark'] textarea {
+  background-color: transparent;
+  color: var(--text-primary);
 }
 
 page {
